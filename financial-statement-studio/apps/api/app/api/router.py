@@ -9,6 +9,10 @@ from app.api.routes.financial_reports import (
 from app.api.routes.health import (
     router as health_router,
 )
+from app.api.routes.ledger_accounts import (
+    company_chart_router,
+    ledger_account_router,
+)
 
 
 api_router = APIRouter()
@@ -29,4 +33,16 @@ api_router.include_router(
     financial_reports_router,
     prefix="/financial-reports",
     tags=["Financial Reports"],
+)
+
+api_router.include_router(
+    company_chart_router,
+    prefix="/companies/{company_id}/chart-of-accounts",
+    tags=["Chart of Accounts"],
+)
+
+api_router.include_router(
+    ledger_account_router,
+    prefix="/ledger-accounts",
+    tags=["Ledger Accounts"],
 )

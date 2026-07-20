@@ -11,6 +11,7 @@ from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.financial_report import FinancialReport
+    from app.models.ledger_account import LedgerAccount
 
 
 class Company(
@@ -100,6 +101,13 @@ class Company(
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    ledger_accounts: Mapped[list[LedgerAccount]] = relationship(
+    "LedgerAccount",
+    back_populates="company",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
 
     def __repr__(self) -> str:
         return (
