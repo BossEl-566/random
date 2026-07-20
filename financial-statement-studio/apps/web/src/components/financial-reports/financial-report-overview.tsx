@@ -302,60 +302,92 @@ export function FinancialReportOverview({
         </div>
       </section>
 
-      <section className="report-editor-placeholder">
-        <p className="eyebrow">
-          Next development phase
-        </p>
+      <section className="report-accounting-launchpad">
+  <div className="report-accounting-launchpad__heading">
+    <div>
+      <p className="eyebrow">
+        Accounting workspace
+      </p>
 
-        <h2>
-          Financial statement editor
-        </h2>
+      <h2>
+        Continue preparing this report
+      </h2>
+
+      <p>
+        Record balanced transactions,
+        review posted balances and manage
+        the company’s accounting structure.
+      </p>
+    </div>
+  </div>
+
+  <div className="report-accounting-launchpad__grid">
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/journal`}
+    >
+      <span>01</span>
+
+      <h3>
+        General journal
+      </h3>
+
+      <p>
+        Record opening balances, daily
+        transactions and adjustments using
+        equal debit and credit lines.
+      </p>
+
+      <strong>
+        Open journal →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/trial-balance`}
+    >
+      <span>02</span>
+
+      <h3>
+        Trial Balance
+      </h3>
+
+      <p>
+        Review all posted ledger balances
+        and verify that debit and credit
+        totals agree.
+      </p>
+
+      <strong>
+        View Trial Balance →
+      </strong>
+    </Link>
+
+    {company ? (
+      <Link
+        className="report-launch-card"
+        href={`/companies/${company.id}/chart-of-accounts`}
+      >
+        <span>03</span>
+
+        <h3>
+          Chart of Accounts
+        </h3>
 
         <p>
-          This report document is saved and
-          ready. The next phase will add the
-          chart of accounts, guided financial
-          data entry and automatic statement
-          calculations.
+          Add, classify, group and manage
+          the ledger accounts available to
+          this report.
         </p>
 
-        <div className="report-placeholder-grid">
-          <article>
-            <span>01</span>
-            <h3>
-              Chart of accounts
-            </h3>
-            <p>
-              Accounts will be selected from
-              the report’s business template.
-            </p>
-          </article>
-
-          <article>
-            <span>02</span>
-            <h3>
-              Financial data entry
-            </h3>
-            <p>
-              The user will enter balances
-              while the system calculates
-              totals.
-            </p>
-          </article>
-
-          <article>
-            <span>03</span>
-            <h3>
-              Statement preview
-            </h3>
-            <p>
-              Generated financial statements
-              will be validated before
-              printing.
-            </p>
-          </article>
-        </div>
-      </section>
+        <strong>
+          Manage accounts →
+        </strong>
+      </Link>
+    ) : null}
+  </div>
+</section>
     </main>
   );
 }
