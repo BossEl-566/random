@@ -1,65 +1,106 @@
-import Image from "next/image";
+import { BackendStatusCard } from "@/components/backend-status-card";
+
+const foundationItems = [
+  {
+    title: "Next.js frontend",
+    description:
+      "The user interface and financial-document workspace are ready.",
+  },
+  {
+    title: "FastAPI backend",
+    description:
+      "The accounting API is running locally with structured routes.",
+  },
+  {
+    title: "SQLite database",
+    description:
+      "Local offline storage is connected and responding correctly.",
+  },
+  {
+    title: "Electron desktop",
+    description:
+      "The Windows desktop shell will be connected in the next checkpoint.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="page-shell">
+      <section className="hero">
+        <div className="hero__content">
+          <div className="brand-mark" aria-hidden="true">
+            FS
+          </div>
+
+          <p className="eyebrow">Financial Statement Studio</p>
+
+          <h1>
+            Professional financial statements without the accounting
+            confusion.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="hero__description">
+            A guided desktop accounting workspace for preparing,
+            validating, reviewing, and exporting financial statements for
+            businesses in Ghana.
+          </p>
+
+          <div className="hero__actions">
+            <button className="primary-button" type="button" disabled>
+              Create financial statement
+            </button>
+
+            <span>Company setup will be added after the foundation.</span>
+          </div>
+        </div>
+
+        <div className="hero__summary">
+          <p className="eyebrow">Current phase</p>
+          <strong>Phase 2</strong>
+          <span>Project foundation and system integration</span>
+
+          <div className="progress-track" aria-label="Foundation progress">
+            <div className="progress-track__value" />
+          </div>
+
+          <small>Frontend, backend, and database completed</small>
+        </div>
+      </section>
+
+      <section className="workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Foundation status</p>
+            <h2>Core system components</h2>
+          </div>
+
+          <p>
+            Every component will be tested independently before accounting
+            features are introduced.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="foundation-grid">
+          {foundationItems.map((item, index) => (
+            <article className="foundation-card" key={item.title}>
+              <span className="foundation-card__number">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+            </article>
+          ))}
         </div>
-      </main>
-    </div>
+      </section>
+
+      <section className="workspace-section">
+        <BackendStatusCard />
+      </section>
+
+      <footer className="page-footer">
+        <span>Financial Statement Studio</span>
+        <span>Local-first financial accounting software</span>
+      </footer>
+    </main>
   );
 }
