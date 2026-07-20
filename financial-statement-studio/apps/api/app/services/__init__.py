@@ -45,6 +45,9 @@ from app.services.ledger_account_service import (
     LedgerAccountServiceError,
     ProtectedSystemAccountError,
 )
+from app.services.financial_statement_service import (
+    FinancialStatementService,
+)
 
 
 __all__ = [
@@ -87,4 +90,5 @@ __all__ = [
     "LockedJournalReportError",
     "ProtectedSystemAccountError",
     "UnbalancedJournalEntryError",
+    "FinancialStatementService",
 ]

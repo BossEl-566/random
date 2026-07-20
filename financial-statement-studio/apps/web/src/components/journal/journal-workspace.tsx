@@ -40,6 +40,7 @@ import {
 import type {
   LedgerAccount,
 } from "@/types/ledger-account";
+import { VoidJournalEntryDialog } from "@/components/journal/void-journal-entry-dialog";
 
 type JournalWorkspaceProps = {
   reportId: string;
@@ -140,6 +141,20 @@ export function JournalWorkspace({
 
   const [busyAction, setBusyAction] =
     useState<BusyAction>(null);
+
+  const [
+  voidingEntry,
+  setVoidingEntry,
+] = useState<JournalEntry | null>(
+  null,
+);
+
+const [
+  voidDialogError,
+  setVoidDialogError,
+] = useState<string | null>(
+  null,
+);
 
   useEffect(() => {
     let cancelled = false;
@@ -359,60 +374,49 @@ export function JournalWorkspace({
     }
   }
 
-  async function handleVoid(
-    entry: JournalEntry,
-  ): Promise<void> {
-    const reason =
-      window.prompt(
-        [
-          `Void ${entry.entry_number}`,
-          "",
-          "Enter the audit reason for voiding this posted entry:",
-        ].join("\n"),
-      );
+ function handleVoid(
+  entry: JournalEntry,
+): void {
+  setActionError(null);
+  setVoidDialogError(null);
+  setVoidingEntry(entry);
+}
 
-    if (reason === null) {
-      return;
-    }
-
-    const cleanedReason =
-      reason.trim();
-
-    if (
-      cleanedReason.length < 3
-    ) {
-      setActionError(
-        "Void reason must contain at least three characters.",
-      );
-      return;
-    }
-
-    setActionError(null);
-    setBusyEntryId(entry.id);
-    setBusyAction("void");
-
-    try {
-      await voidJournalEntry(
-        entry.id,
-        {
-          reason:
-            cleanedReason,
-        },
-      );
-
-      requestReload();
-    } catch (error) {
-      setActionError(
-        getErrorMessage(
-          error,
-          "The journal entry could not be voided.",
-        ),
-      );
-    } finally {
-      setBusyEntryId(null);
-      setBusyAction(null);
-    }
+async function handleConfirmVoid(
+  reason: string,
+): Promise<void> {
+  if (!voidingEntry) {
+    return;
   }
+
+  setVoidDialogError(null);
+  setBusyEntryId(
+    voidingEntry.id,
+  );
+  setBusyAction("void");
+
+  try {
+    await voidJournalEntry(
+      voidingEntry.id,
+      {
+        reason,
+      },
+    );
+
+    setVoidingEntry(null);
+    requestReload();
+  } catch (error) {
+    setVoidDialogError(
+      getErrorMessage(
+        error,
+        "The journal entry could not be voided.",
+      ),
+    );
+  } finally {
+    setBusyEntryId(null);
+    setBusyAction(null);
+  }
+}
 
   const filtersApplied =
     Boolean(
@@ -943,6 +947,25 @@ export function JournalWorkspace({
           }
         />
       ) : null}
+      {voidingEntry ? (
+  <VoidJournalEntryDialog
+    entry={voidingEntry}
+    error={voidDialogError}
+    isSubmitting={
+      busyEntryId ===
+        voidingEntry.id &&
+      busyAction === "void"
+    }
+    onClose={() => {
+      setVoidingEntry(null);
+      setVoidDialogError(null);
+    }}
+    onConfirm={
+      handleConfirmVoid
+    }
+  />
+) : null}
+
     </main>
   );
 }

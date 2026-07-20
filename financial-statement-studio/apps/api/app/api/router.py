@@ -17,6 +17,9 @@ from app.api.routes.journal_entries import (
     journal_entry_router,
     report_journal_router,
 )
+from app.api.routes.financial_statements import (
+    financial_statement_router,
+)
 
 
 api_router = APIRouter()
@@ -64,4 +67,10 @@ api_router.include_router(
     journal_entry_router,
     prefix="/journal-entries",
     tags=["Journal Entries"],
+)
+
+api_router.include_router(
+    financial_statement_router,
+    prefix="/financial-reports/{report_id}/statements",
+    tags=["Financial Statements"],
 )

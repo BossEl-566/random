@@ -3859,3 +3859,139 @@ button:disabled {
     justify-content: space-between;
   }
 }
+.void-entry-backdrop {
+  position: fixed;
+  z-index: 150;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background:
+    rgba(10, 18, 31, 0.66);
+  backdrop-filter: blur(6px);
+}
+
+.void-entry-dialog {
+  width: min(580px, 100%);
+  overflow: hidden;
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow:
+    0 28px 90px
+    rgba(0, 0, 0, 0.3);
+  animation:
+    company-editor-enter
+    180ms ease-out;
+}
+
+.void-entry-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 28px;
+  border-bottom:
+    1px solid var(--border);
+}
+
+.void-entry-dialog__header h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: -0.04em;
+}
+
+.void-entry-dialog__header p:last-child {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.void-entry-dialog__header > button {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 1.4rem;
+}
+
+.void-entry-form {
+  display: grid;
+  gap: 20px;
+  padding: 26px 28px 28px;
+}
+
+.void-entry-warning {
+  padding: 16px 18px;
+  border: 1px solid var(--danger-border);
+  border-radius: 12px;
+  background: var(--danger-background);
+  color: var(--danger);
+}
+
+.void-entry-warning strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+
+.void-entry-warning p {
+  margin: 0;
+  font-size: 0.77rem;
+  line-height: 1.6;
+}
+
+.void-entry-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.void-entry-confirm-button {
+  min-height: 43px;
+  border:
+    1px solid
+    var(--danger);
+  border-radius: 10px;
+  background: var(--danger);
+  padding: 0 17px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.void-entry-confirm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 620px) {
+  .void-entry-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .void-entry-dialog {
+    border-radius: 18px;
+  }
+
+  .void-entry-dialog__header,
+  .void-entry-form {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .void-entry-form__footer {
+    display: grid;
+    grid-template-columns:
+      1fr 1fr;
+  }
+}

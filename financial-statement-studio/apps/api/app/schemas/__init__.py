@@ -39,6 +39,12 @@ from app.schemas.ledger_account import (
     NormalBalance,
     ReportCategory,
 )
+from app.schemas.financial_statement import (
+    FinancialStatementLine,
+    FinancialStatementSection,
+    ProfitOrLossResponse,
+    StatementOfFinancialPositionResponse,
+)
 
 
 __all__ = [
@@ -75,4 +81,8 @@ __all__ = [
     "ReportType",
     "TrialBalanceLine",
     "TrialBalanceResponse",
+    "FinancialStatementLine",
+    "FinancialStatementSection",
+    "ProfitOrLossResponse",
+    "StatementOfFinancialPositionResponse",
 ]
