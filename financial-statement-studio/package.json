@@ -1,0 +1,16 @@
+{
+  "name": "financial-statement-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Professional desktop financial accounting and statement preparation software.",
+  "workspaces": [
+    "apps/web",
+    "apps/desktop",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=web",
+    "build:web": "npm run build --workspace=web",
+    "lint:web": "npm run lint --workspace=web"
+  }
+}

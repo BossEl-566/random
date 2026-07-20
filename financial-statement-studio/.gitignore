@@ -1,0 +1,49 @@
+# Node
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Keep environment templates
+!.env.example
+
+# Python
+apps/api/.venv/
+apps/api/__pycache__/
+apps/api/**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Database and local application data
+apps/api/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Electron
+apps/desktop/dist/
+desktop-dist/
+release/
+
+# Operating systems
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
