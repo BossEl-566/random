@@ -11,6 +11,12 @@
   "scripts": {
     "dev:web": "npm run dev --workspace=web",
     "build:web": "npm run build --workspace=web",
-    "lint:web": "npm run lint --workspace=web"
+    "lint:web": "npm run lint --workspace=web",
+    "build:desktop": "npm run build --workspace=desktop",
+    "dev:electron": "npm run dev --workspace=desktop",
+    "dev:desktop": "concurrently -k -n WEB,ELECTRON \"npm run dev:web\" \"npm run dev:electron\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   }
 }

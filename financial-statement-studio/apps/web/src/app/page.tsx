@@ -1,4 +1,5 @@
 import { BackendStatusCard } from "@/components/backend-status-card";
+import { DesktopStatusCard } from "@/components/desktop-status-card";
 
 const foundationItems = [
   {
@@ -96,6 +97,10 @@ export default function Home() {
       <section className="workspace-section">
         <BackendStatusCard />
       </section>
+
+      <section className="workspace-section">
+  <DesktopStatusCard />
+</section>
 
       <footer className="page-footer">
         <span>Financial Statement Studio</span>
