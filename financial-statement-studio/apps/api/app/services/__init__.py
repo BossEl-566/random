@@ -5,6 +5,17 @@ from app.services.company_service import (
     CompanyServiceError,
     EmptyCompanyUpdateError,
 )
+from app.services.financial_report_service import (
+    EmptyFinancialReportUpdateError,
+    FinancialReportCompanyNotFoundError,
+    FinancialReportNotFoundError,
+    FinancialReportPersistenceError,
+    FinancialReportService,
+    FinancialReportServiceError,
+    InactiveFinancialReportCompanyError,
+    InvalidComparisonReportError,
+    InvalidFinancialReportPeriodError,
+)
 
 
 __all__ = [
@@ -13,4 +24,13 @@ __all__ = [
     "CompanyService",
     "CompanyServiceError",
     "EmptyCompanyUpdateError",
+    "EmptyFinancialReportUpdateError",
+    "FinancialReportCompanyNotFoundError",
+    "FinancialReportNotFoundError",
+    "FinancialReportPersistenceError",
+    "FinancialReportService",
+    "FinancialReportServiceError",
+    "InactiveFinancialReportCompanyError",
+    "InvalidComparisonReportError",
+    "InvalidFinancialReportPeriodError",
 ]
