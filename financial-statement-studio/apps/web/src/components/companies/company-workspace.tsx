@@ -244,17 +244,24 @@ export function CompanyWorkspace() {
         </Link>
 
         <div className="app-topbar__right">
-          <span className="desktop-mode-badge">
-            Local desktop workspace
-          </span>
+  <span className="desktop-mode-badge">
+    Local desktop workspace
+  </span>
 
-          <Link
-            className="topbar-link"
-            href="/"
-          >
-            Foundation status
-          </Link>
-        </div>
+  <Link
+    className="topbar-link"
+    href="/reports"
+  >
+    Financial reports
+  </Link>
+
+  <Link
+    className="topbar-link"
+    href="/"
+  >
+    Foundation status
+  </Link>
+</div>
       </header>
 
       <section className="company-page__hero">

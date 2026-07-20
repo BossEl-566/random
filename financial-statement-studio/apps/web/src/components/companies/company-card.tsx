@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   BUSINESS_TYPE_OPTIONS,
   REPORTING_BASIS_OPTIONS,
@@ -149,29 +150,36 @@ export function CompanyCard({
       </div>
 
       <div className="company-card__actions">
-        <button
-          className="company-action-button"
-          type="button"
-          onClick={() =>
-            onEdit(company)
-          }
-        >
-          Edit company
-        </button>
+  <Link
+    className="company-action-button company-action-button--link"
+    href={`/reports?company_id=${company.id}`}
+  >
+    Reports
+  </Link>
 
-        <button
-          className="company-action-button company-action-button--danger"
-          type="button"
-          disabled={isDeactivating}
-          onClick={() =>
-            onDeactivate(company)
-          }
-        >
-          {isDeactivating
-            ? "Deactivating..."
-            : "Deactivate"}
-        </button>
-      </div>
+  <button
+    className="company-action-button"
+    type="button"
+    onClick={() =>
+      onEdit(company)
+    }
+  >
+    Edit
+  </button>
+
+  <button
+    className="company-action-button company-action-button--danger"
+    type="button"
+    disabled={isDeactivating}
+    onClick={() =>
+      onDeactivate(company)
+    }
+  >
+    {isDeactivating
+      ? "Deactivating..."
+      : "Deactivate"}
+  </button>
+</div>
     </article>
   );
 }
