@@ -1,5 +1,6 @@
 import { BackendStatusCard } from "@/components/backend-status-card";
 import { DesktopStatusCard } from "@/components/desktop-status-card";
+import Link from "next/link";
 
 const foundationItems = [
   {
@@ -47,11 +48,16 @@ export default function Home() {
           </p>
 
           <div className="hero__actions">
-            <button className="primary-button" type="button" disabled>
-              Create financial statement
-            </button>
+            <Link
+  className="primary-button"
+  href="/companies"
+>
+  Manage companies
+</Link>
 
-            <span>Company setup will be added after the foundation.</span>
+            <span>
+  Create a company profile before preparing its financial reports.
+</span>
           </div>
         </div>
 

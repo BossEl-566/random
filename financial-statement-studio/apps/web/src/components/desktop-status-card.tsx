@@ -1,8 +1,7 @@
 "use client";
 
 import {
-  useEffect,
-  useState,
+  useSyncExternalStore,
 } from "react";
 
 type DesktopInformation = {
@@ -15,47 +14,63 @@ type DesktopInformation = {
   };
 };
 
+/*
+ * Electron information does not currently emit change events.
+ * This stable subscription therefore returns only a cleanup function.
+ */
+function subscribeToDesktopInformation(
+  _onStoreChange: () => void,
+): () => void {
+  return () => undefined;
+}
+
+function getDesktopInformationSnapshot():
+  | DesktopInformation
+  | null {
+  return window.desktopAPI ?? null;
+}
+
+/*
+ * During server rendering and hydration, Electron's window API is not
+ * available. Returning null keeps the server and initial client output
+ * consistent.
+ */
+function getServerDesktopInformationSnapshot(): null {
+  return null;
+}
+
 function getPlatformName(
   platform: string,
 ): string {
-  const platformNames: Record<string, string> = {
+  const platformNames: Record<
+    string,
+    string
+  > = {
     win32: "Windows",
     darwin: "macOS",
     linux: "Linux",
   };
 
-  return platformNames[platform] ?? platform;
+  return (
+    platformNames[platform] ??
+    platform
+  );
 }
 
 export function DesktopStatusCard() {
-  const [
-    desktopInformation,
-    setDesktopInformation,
-  ] = useState<DesktopInformation | null>(
-    null,
-  );
-
-  const [
-    inspectionComplete,
-    setInspectionComplete,
-  ] = useState(false);
-
-  useEffect(() => {
-    setDesktopInformation(
-      window.desktopAPI ?? null,
+  const desktopInformation =
+    useSyncExternalStore(
+      subscribeToDesktopInformation,
+      getDesktopInformationSnapshot,
+      getServerDesktopInformationSnapshot,
     );
-
-    setInspectionComplete(true);
-  }, []);
 
   const isDesktop =
     desktopInformation?.isElectron === true;
 
-  const statusLabel = !inspectionComplete
-    ? "Checking"
-    : isDesktop
-      ? "Desktop active"
-      : "Browser mode";
+  const statusLabel = isDesktop
+    ? "Desktop active"
+    : "Browser mode";
 
   return (
     <section
@@ -72,7 +87,9 @@ export function DesktopStatusCard() {
             Desktop environment
           </p>
 
-          <h2>Electron application shell</h2>
+          <h2>
+            Electron application shell
+          </h2>
         </div>
 
         <div className="status-badge">

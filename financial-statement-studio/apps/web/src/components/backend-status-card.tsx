@@ -1,9 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-import { API_URL, getApiHealth } from "@/lib/api";
-import type { ApiConnectionState } from "@/types/api";
+import {
+  API_URL,
+  getApiHealth,
+} from "@/lib/api";
+import type {
+  ApiConnectionState,
+  ApiHealthResponse,
+} from "@/types/api";
 
 const initialState: ApiConnectionState = {
   status: "loading",
@@ -11,7 +21,9 @@ const initialState: ApiConnectionState = {
   message: "Checking the accounting backend...",
 };
 
-function formatTimestamp(timestamp: string): string {
+function formatTimestamp(
+  timestamp: string,
+): string {
   const parsedDate = new Date(timestamp);
 
   if (Number.isNaN(parsedDate.getTime())) {
@@ -24,42 +36,99 @@ function formatTimestamp(timestamp: string): string {
   }).format(parsedDate);
 }
 
+function createConnectedState(
+  health: ApiHealthResponse,
+): ApiConnectionState {
+  return {
+    status: "connected",
+    data: health,
+    message:
+      "Frontend and backend are connected successfully.",
+  };
+}
+
+function createErrorState(
+  error: unknown,
+): ApiConnectionState {
+  return {
+    status: "error",
+    data: null,
+    message:
+      error instanceof Error
+        ? error.message
+        : "An unknown connection error occurred.",
+  };
+}
+
 export function BackendStatusCard() {
   const [connection, setConnection] =
-    useState<ApiConnectionState>(initialState);
+    useState<ApiConnectionState>(
+      initialState,
+    );
 
-  const checkConnection = useCallback(async () => {
-    setConnection({
-      status: "loading",
-      data: null,
-      message: "Checking the accounting backend...",
-    });
+  /*
+   * Initial backend request.
+   *
+   * The Effect starts an external network request. State is changed only
+   * after the Promise resolves or rejects, rather than synchronously in
+   * the Effect body.
+   */
+  useEffect(() => {
+    let cancelled = false;
 
-    try {
-      const health = await getApiHealth();
+    getApiHealth()
+      .then((health) => {
+        if (cancelled) {
+          return;
+        }
 
-      setConnection({
-        status: "connected",
-        data: health,
-        message: "Frontend and backend are connected successfully.",
+        setConnection(
+          createConnectedState(health),
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setConnection(
+          createErrorState(error),
+        );
       });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "An unknown connection error occurred.";
 
-      setConnection({
-        status: "error",
-        data: null,
-        message,
-      });
-    }
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    void checkConnection();
-  }, [checkConnection]);
+  /*
+   * Manual retry.
+   *
+   * This function is called from a button event, so setting the loading
+   * state immediately is appropriate.
+   */
+  const checkConnection =
+    useCallback(async () => {
+      setConnection({
+        status: "loading",
+        data: null,
+        message:
+          "Checking the accounting backend...",
+      });
+
+      try {
+        const health =
+          await getApiHealth();
+
+        setConnection(
+          createConnectedState(health),
+        );
+      } catch (error) {
+        setConnection(
+          createErrorState(error),
+        );
+      }
+    }, []);
 
   const statusLabel =
     connection.status === "connected"
@@ -75,7 +144,10 @@ export function BackendStatusCard() {
     >
       <div className="status-card__header">
         <div>
-          <p className="eyebrow">System connection</p>
+          <p className="eyebrow">
+            System connection
+          </p>
+
           <h2>Accounting backend</h2>
         </div>
 
@@ -85,7 +157,9 @@ export function BackendStatusCard() {
         </div>
       </div>
 
-      <p className="status-card__message">{connection.message}</p>
+      <p className="status-card__message">
+        {connection.message}
+      </p>
 
       <dl className="status-details">
         <div>
@@ -96,21 +170,24 @@ export function BackendStatusCard() {
         <div>
           <dt>Application</dt>
           <dd>
-            {connection.data?.application ?? "Waiting for response"}
+            {connection.data?.application ??
+              "Waiting for response"}
           </dd>
         </div>
 
         <div>
           <dt>Environment</dt>
           <dd>
-            {connection.data?.environment ?? "Not available"}
+            {connection.data?.environment ??
+              "Not available"}
           </dd>
         </div>
 
         <div>
           <dt>Database</dt>
           <dd>
-            {connection.data?.database ?? "Not confirmed"}
+            {connection.data?.database ??
+              "Not confirmed"}
           </dd>
         </div>
 
@@ -118,7 +195,9 @@ export function BackendStatusCard() {
           <dt>Last response</dt>
           <dd>
             {connection.data
-              ? formatTimestamp(connection.data.timestamp)
+              ? formatTimestamp(
+                  connection.data.timestamp,
+                )
               : "Not available"}
           </dd>
         </div>
@@ -127,8 +206,12 @@ export function BackendStatusCard() {
       <button
         className="secondary-button"
         type="button"
-        onClick={() => void checkConnection()}
-        disabled={connection.status === "loading"}
+        disabled={
+          connection.status === "loading"
+        }
+        onClick={() => {
+          void checkConnection();
+        }}
       >
         {connection.status === "loading"
           ? "Checking connection..."
