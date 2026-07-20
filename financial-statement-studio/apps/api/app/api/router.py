@@ -13,6 +13,10 @@ from app.api.routes.ledger_accounts import (
     company_chart_router,
     ledger_account_router,
 )
+from app.api.routes.journal_entries import (
+    journal_entry_router,
+    report_journal_router,
+)
 
 
 api_router = APIRouter()
@@ -45,4 +49,19 @@ api_router.include_router(
     ledger_account_router,
     prefix="/ledger-accounts",
     tags=["Ledger Accounts"],
+)
+
+api_router.include_router(
+    report_journal_router,
+    prefix="/financial-reports/{report_id}",
+    tags=[
+        "Journal Entries",
+        "Trial Balance",
+    ],
+)
+
+api_router.include_router(
+    journal_entry_router,
+    prefix="/journal-entries",
+    tags=["Journal Entries"],
 )

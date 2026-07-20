@@ -7,6 +7,16 @@ import type {
   CompanyUpdatePayload,
 } from "@/types/company";
 
+export async function getCompany(
+  companyId: string,
+): Promise<Company> {
+  return apiRequest<Company>(
+    `/api/companies/${encodeURIComponent(
+      companyId,
+    )}`,
+  );
+}
+
 export async function listCompanies(
   query: CompanyListQuery = {},
 ): Promise<CompanyListResponse> {

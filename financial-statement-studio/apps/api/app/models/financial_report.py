@@ -20,6 +20,7 @@ from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.company import Company
+    from app.models.journal_entry import JournalEntry
 
 
 class FinancialReport(
@@ -130,6 +131,13 @@ class FinancialReport(
         "Company",
         back_populates="financial_reports",
     )
+
+    journal_entries: Mapped[list[JournalEntry]] = relationship(
+    "JournalEntry",
+    back_populates="financial_report",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
 
     comparison_report: Mapped[FinancialReport | None] = relationship(
         "FinancialReport",

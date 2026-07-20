@@ -20,6 +20,7 @@ from app.models.mixins import PrimaryKeyMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.company import Company
+    from app.models.journal_line import JournalLine
 
 
 class LedgerAccount(
@@ -135,6 +136,11 @@ class LedgerAccount(
         "Company",
         back_populates="ledger_accounts",
     )
+
+    journal_lines: Mapped[list[JournalLine]] = relationship(
+    "JournalLine",
+    back_populates="ledger_account",
+)
 
     parent_account: Mapped[LedgerAccount | None] = relationship(
         "LedgerAccount",

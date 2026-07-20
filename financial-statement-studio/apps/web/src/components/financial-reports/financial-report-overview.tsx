@@ -212,20 +212,29 @@ export function FinancialReportOverview({
         </Link>
 
         <div className="app-topbar__right">
-          <Link
-            className="topbar-link"
-            href="/reports"
-          >
-            All reports
-          </Link>
+  {company ? (
+    <Link
+      className="topbar-link"
+      href={`/companies/${company.id}/chart-of-accounts`}
+    >
+      Chart of accounts
+    </Link>
+  ) : null}
 
-          <Link
-            className="topbar-link"
-            href="/companies"
-          >
-            Companies
-          </Link>
-        </div>
+  <Link
+    className="topbar-link"
+    href="/reports"
+  >
+    All reports
+  </Link>
+
+  <Link
+    className="topbar-link"
+    href="/companies"
+  >
+    Companies
+  </Link>
+</div>
       </header>
 
       <section className="report-overview-hero">

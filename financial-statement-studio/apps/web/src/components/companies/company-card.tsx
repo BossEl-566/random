@@ -157,6 +157,13 @@ export function CompanyCard({
     Reports
   </Link>
 
+  <Link
+    className="company-action-button company-action-button--accounts"
+    href={`/companies/${company.id}/chart-of-accounts`}
+  >
+    Accounts
+  </Link>
+
   <button
     className="company-action-button"
     type="button"
