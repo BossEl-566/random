@@ -135,6 +135,7 @@ class LedgerAccountCreate(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
+    is_cash_equivalent: bool = False
 
     @field_validator("account_code")
     @classmethod
@@ -207,6 +208,7 @@ class LedgerAccountUpdate(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
+    is_cash_equivalent: bool | None = None
 
     @field_validator("account_code")
     @classmethod
@@ -261,6 +263,7 @@ class LedgerAccountResponse(BaseModel):
     description: str | None
 
     is_system_account: bool
+    is_cash_equivalent: bool
     is_active: bool
     display_order: int
 

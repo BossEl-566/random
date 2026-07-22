@@ -177,6 +177,7 @@ export type LedgerAccount = {
   description: string | null;
 
   is_system_account: boolean;
+  is_cash_equivalent: boolean;
   is_active: boolean;
   display_order: number;
 
@@ -205,6 +206,7 @@ export type LedgerAccountCreatePayload = {
   account_type: AccountType;
   report_category: ReportCategory;
   cash_flow_category?: CashFlowCategory | null;
+  is_cash_equivalent?: boolean;
   normal_balance: NormalBalance;
   parent_account_id?: string | null;
   description?: string | null;
