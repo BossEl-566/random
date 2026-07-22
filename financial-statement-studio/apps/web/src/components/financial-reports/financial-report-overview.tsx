@@ -314,9 +314,9 @@ export function FinancialReportOverview({
       </h2>
 
       <p>
-        Record balanced transactions,
-        review posted balances and manage
-        the company’s accounting structure.
+        Record transactions, verify balances
+        and review automatically calculated
+        financial statements.
       </p>
     </div>
   </div>
@@ -329,11 +329,11 @@ export function FinancialReportOverview({
       <span>01</span>
 
       <h3>
-        General journal
+        General Journal
       </h3>
 
       <p>
-        Record opening balances, daily
+        Record opening balances, standard
         transactions and adjustments using
         equal debit and credit lines.
       </p>
@@ -354,13 +354,54 @@ export function FinancialReportOverview({
       </h3>
 
       <p>
-        Review all posted ledger balances
-        and verify that debit and credit
-        totals agree.
+        Review posted account balances and
+        confirm that total debits equal total
+        credits.
       </p>
 
       <strong>
         View Trial Balance →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/profit-or-loss`}
+    >
+      <span>03</span>
+
+      <h3>
+        Profit or Loss
+      </h3>
+
+      <p>
+        Review revenue, direct costs,
+        operating expenses, taxation and
+        profit for the reporting period.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/financial-position`}
+    >
+      <span>04</span>
+
+      <h3>
+        Financial Position
+      </h3>
+
+      <p>
+        Review assets, liabilities, equity
+        and the accounting-equation balance.
+      </p>
+
+      <strong>
+        View statement →
       </strong>
     </Link>
 
@@ -369,7 +410,7 @@ export function FinancialReportOverview({
         className="report-launch-card"
         href={`/companies/${company.id}/chart-of-accounts`}
       >
-        <span>03</span>
+        <span>05</span>
 
         <h3>
           Chart of Accounts
