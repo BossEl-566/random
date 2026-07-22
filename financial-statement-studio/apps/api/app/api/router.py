@@ -20,6 +20,10 @@ from app.api.routes.journal_entries import (
 from app.api.routes.financial_statements import (
     financial_statement_router,
 )
+from app.api.routes.cash_flow import (
+    cash_flow_router,
+)
+
 
 
 api_router = APIRouter()
@@ -73,4 +77,10 @@ api_router.include_router(
     financial_statement_router,
     prefix="/financial-reports/{report_id}/statements",
     tags=["Financial Statements"],
+)
+
+api_router.include_router(
+    cash_flow_router,
+    prefix="/financial-reports/{report_id}",
+    tags=["Statement of Cash Flows"],
 )
