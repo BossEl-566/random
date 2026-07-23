@@ -13,6 +13,7 @@ class CashFlowReadinessAccount(BaseModel):
     is_active: bool
 
 
+
 class CashFlowReadinessWarning(BaseModel):
     code: str
     message: str
