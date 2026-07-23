@@ -11,6 +11,7 @@ from pydantic import (
 )
 
 
+
 class BusinessType(StrEnum):
     """Supported default company templates."""
 
