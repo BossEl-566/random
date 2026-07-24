@@ -78,9 +78,9 @@ function isAllowedStatementUrl(
     const parsedUrl =
       new URL(targetUrl);
 
-    return /^\/reports\/[^/]+\/statements\/(profit-or-loss|financial-position)\/?$/.test(
-      parsedUrl.pathname,
-    );
+    return /^\/reports\/[^/]+\/statements\/(profit-or-loss|financial-position|cash-flows)\/?$/.test(
+  parsedUrl.pathname,
+);
   } catch {
     return false;
   }

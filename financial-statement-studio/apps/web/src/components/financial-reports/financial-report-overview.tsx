@@ -302,7 +302,7 @@ export function FinancialReportOverview({
         </div>
       </section>
 
-      <section className="report-accounting-launchpad">
+     <section className="report-accounting-launchpad">
   <div className="report-accounting-launchpad__heading">
     <div>
       <p className="eyebrow">
@@ -405,12 +405,33 @@ export function FinancialReportOverview({
       </strong>
     </Link>
 
+    <Link
+      className="report-launch-card report-launch-card--statement report-launch-card--cash-flow"
+      href={`/reports/${report.id}/statements/cash-flows`}
+    >
+      <span>05</span>
+
+      <h3>
+        Cash Flows
+      </h3>
+
+      <p>
+        Review operating, investing and
+        financing cash flows using the
+        indirect method.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
     {company ? (
       <Link
         className="report-launch-card"
         href={`/companies/${company.id}/chart-of-accounts`}
       >
-        <span>05</span>
+        <span>06</span>
 
         <h3>
           Chart of Accounts

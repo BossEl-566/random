@@ -292,6 +292,13 @@ export function ProfitOrLossWorkspace({
           </Link>
 
           <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/cash-flows`}
+>
+  Cash flows
+</Link>
+
+          <Link
             className="topbar-link"
             href={`/reports/${reportId}`}
           >
