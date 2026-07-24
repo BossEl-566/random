@@ -10,6 +10,9 @@ from app.repositories.journal_entry_repository import (
 from app.repositories.ledger_account_repository import (
     LedgerAccountRepository,
 )
+from app.repositories.cash_flow_repository import (
+    CashFlowRepository,
+)
 
 
 __all__ = [
@@ -17,4 +20,5 @@ __all__ = [
     "FinancialReportRepository",
     "JournalEntryRepository",
     "LedgerAccountRepository",
+    "CashFlowRepository",
 ]
