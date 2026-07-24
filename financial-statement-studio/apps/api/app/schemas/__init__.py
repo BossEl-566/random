@@ -45,10 +45,14 @@ from app.schemas.financial_statement import (
     ProfitOrLossResponse,
     StatementOfFinancialPositionResponse,
 )
+
 from app.schemas.cash_flow import (
     CashFlowReadinessAccount,
     CashFlowReadinessResponse,
     CashFlowReadinessWarning,
+    CashFlowStatementLine,
+    CashFlowStatementSection,
+    StatementOfCashFlowsResponse,
 )
 
 
@@ -93,4 +97,7 @@ __all__ = [
     "CashFlowReadinessAccount",
     "CashFlowReadinessResponse",
     "CashFlowReadinessWarning",
+    "CashFlowStatementLine",
+    "CashFlowStatementSection",
+    "StatementOfCashFlowsResponse",
 ]
