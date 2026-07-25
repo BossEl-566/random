@@ -55,6 +55,9 @@ from app.services.cash_flow_statement_service import (
     CashFlowNotReadyError,
     CashFlowStatementService,
 )
+from app.services.equity_statement_service import (
+    EquityStatementService,
+)
 
 
 __all__ = [
@@ -101,4 +104,5 @@ __all__ = [
     "CashFlowReadinessService",
     "CashFlowNotReadyError",
     "CashFlowStatementService",
+    "EquityStatementService",
 ]

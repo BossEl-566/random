@@ -54,6 +54,12 @@ from app.schemas.cash_flow import (
     CashFlowStatementSection,
     StatementOfCashFlowsResponse,
 )
+from app.schemas.equity_statement import (
+    EquityMovementLine,
+    EquityMovementSection,
+    EquityMovementSectionLine,
+    StatementOfChangesInEquityResponse,
+)
 
 
 __all__ = [
@@ -100,4 +106,8 @@ __all__ = [
     "CashFlowStatementLine",
     "CashFlowStatementSection",
     "StatementOfCashFlowsResponse",
+    "EquityMovementLine",
+    "EquityMovementSection",
+    "EquityMovementSectionLine",
+    "StatementOfChangesInEquityResponse",
 ]

@@ -13,6 +13,9 @@ from app.repositories.ledger_account_repository import (
 from app.repositories.cash_flow_repository import (
     CashFlowRepository,
 )
+from app.repositories.equity_statement_repository import (
+    EquityStatementRepository,
+)
 
 
 __all__ = [
@@ -21,4 +24,5 @@ __all__ = [
     "JournalEntryRepository",
     "LedgerAccountRepository",
     "CashFlowRepository",
+    "EquityStatementRepository",
 ]
