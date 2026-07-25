@@ -61,6 +61,21 @@ from app.schemas.equity_statement import (
     StatementOfChangesInEquityResponse,
 )
 
+from app.schemas.notes import (
+    DisclosureTemplateCreate,
+    DisclosureTemplateInitializationResponse,
+    DisclosureTemplateListResponse,
+    DisclosureTemplateResponse,
+    DisclosureTemplateUpdate,
+    FinancialReportNoteCreate,
+    FinancialReportNoteListResponse,
+    FinancialReportNoteResponse,
+    FinancialReportNoteUpdate,
+    ReorderFinancialReportNotesRequest,
+    ReportNotesInitializationRequest,
+    ReportNotesInitializationResponse,
+)
+
 
 __all__ = [
     "AccountType",
@@ -110,4 +125,16 @@ __all__ = [
     "EquityMovementSection",
     "EquityMovementSectionLine",
     "StatementOfChangesInEquityResponse",
+    "DisclosureTemplateCreate",
+    "DisclosureTemplateInitializationResponse",
+    "DisclosureTemplateListResponse",
+    "DisclosureTemplateResponse",
+    "DisclosureTemplateUpdate",
+    "FinancialReportNoteCreate",
+    "FinancialReportNoteListResponse",
+    "FinancialReportNoteResponse",
+    "FinancialReportNoteUpdate",
+    "ReorderFinancialReportNotesRequest",
+    "ReportNotesInitializationRequest",
+    "ReportNotesInitializationResponse",
 ]

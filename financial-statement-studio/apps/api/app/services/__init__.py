@@ -58,6 +58,14 @@ from app.services.cash_flow_statement_service import (
 from app.services.equity_statement_service import (
     EquityStatementService,
 )
+from app.services.notes_service import (
+    NotesConflictError,
+    NotesNotFoundError,
+    NotesPersistenceError,
+    NotesService,
+    NotesServiceError,
+    NotesValidationError,
+)
 
 
 __all__ = [
@@ -105,4 +113,10 @@ __all__ = [
     "CashFlowNotReadyError",
     "CashFlowStatementService",
     "EquityStatementService",
+    "NotesConflictError",
+    "NotesNotFoundError",
+    "NotesPersistenceError",
+    "NotesService",
+    "NotesServiceError",
+    "NotesValidationError",
 ]

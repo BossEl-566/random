@@ -26,6 +26,9 @@ from app.api.routes.cash_flow import (
 from app.api.routes.equity_statements import (
     equity_statement_router,
 )
+from app.api.routes.notes import (
+    notes_router,
+)
 
 
 
@@ -92,4 +95,9 @@ api_router.include_router(
     equity_statement_router,
     prefix="/financial-reports/{report_id}",
     tags=["Statement of Changes in Equity"],
+)
+
+api_router.include_router(
+    notes_router,
+    tags=["Notes and Disclosures"],
 )
