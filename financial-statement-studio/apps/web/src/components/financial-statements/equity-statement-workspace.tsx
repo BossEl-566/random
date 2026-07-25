@@ -4,37 +4,37 @@ import Link from "next/link";
 import {
   type FormEvent,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
-import { StatementSection } from "@/components/financial-statements/statement-section";
+import { EquityAccountTable } from "@/components/financial-statements/equity-account-table";
+import { EquityMovementSection } from "@/components/financial-statements/equity-movement-section";
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
 import {
-  formatStatementDate,
+  formatPeriod,
   formatStatementMoney,
+  toNumber,
 } from "@/components/financial-statements/statement-utils";
 import {
   getCompany,
 } from "@/lib/companies-api";
 import {
+  getStatementOfChangesInEquity,
+} from "@/lib/equity-statements-api";
+import {
   getFinancialReport,
 } from "@/lib/financial-reports-api";
-import {
-  getStatementOfFinancialPosition,
-} from "@/lib/financial-statements-api";
 import type {
   Company,
 } from "@/types/company";
 import type {
+  StatementOfChangesInEquity,
+} from "@/types/equity-statement";
+import type {
   FinancialReport,
 } from "@/types/financial-report";
-import type {
-  FinancialStatementSection,
-  StatementOfFinancialPosition,
-} from "@/types/financial-statement";
-import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
 
-type FinancialPositionWorkspaceProps = {
+type EquityStatementWorkspaceProps = {
   reportId: string;
 };
 
@@ -52,23 +52,26 @@ function getErrorMessage(
     : fallback;
 }
 
-export function FinancialPositionWorkspace({
+export function EquityStatementWorkspace({
   reportId,
-}: FinancialPositionWorkspaceProps) {
+}: EquityStatementWorkspaceProps) {
   const [report, setReport] =
     useState<FinancialReport | null>(
       null,
     );
 
   const [company, setCompany] =
-    useState<Company | null>(null);
+    useState<Company | null>(
+      null,
+    );
 
   const [
     statement,
     setStatement,
-  ] = useState<StatementOfFinancialPosition | null>(
-    null,
-  );
+  ] =
+    useState<StatementOfChangesInEquity | null>(
+      null,
+    );
 
   const [
     resourceState,
@@ -100,31 +103,41 @@ export function FinancialPositionWorkspace({
   ] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
 
-    getFinancialReport(reportId)
+  getFinancialReport(reportId)
       .then(
-        (reportResponse) =>
-          Promise.all([
-            Promise.resolve(
-              reportResponse,
-            ),
+        async (
+          reportResponse,
+        ) => {
+          const [
+            companyResponse,
+            statementResponse,
+          ] = await Promise.all([
             getCompany(
               reportResponse.company_id,
             ),
-            getStatementOfFinancialPosition(
+
+            getStatementOfChangesInEquity(
               reportId,
               appliedAsOf ||
                 undefined,
             ),
-          ]),
+          ]);
+
+          return {
+            reportResponse,
+            companyResponse,
+            statementResponse,
+          };
+        },
       )
       .then(
-        ([
+        ({
           reportResponse,
           companyResponse,
           statementResponse,
-        ]) => {
+        }) => {
           if (cancelled) {
             return;
           }
@@ -142,7 +155,7 @@ export function FinancialPositionWorkspace({
           );
 
           setAsOfInput(
-            statementResponse.as_of,
+            statementResponse.period_end,
           );
 
           setResourceState(
@@ -159,7 +172,7 @@ export function FinancialPositionWorkspace({
           setLoadError(
             getErrorMessage(
               error,
-              "The Statement of Financial Position could not be calculated.",
+              "The Statement of Changes in Equity could not be loaded.",
             ),
           );
 
@@ -177,21 +190,6 @@ export function FinancialPositionWorkspace({
     reloadVersion,
     reportId,
   ]);
-
-  const sectionMap =
-    useMemo(() => {
-      return new Map<
-        string,
-        FinancialStatementSection
-      >(
-        statement?.sections.map(
-          (section) => [
-            section.key,
-            section,
-          ],
-        ) ?? [],
-      );
-    }, [statement]);
 
   function handleAsOfSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -238,6 +236,18 @@ export function FinancialPositionWorkspace({
     );
   }
 
+  const profitIsPositive =
+    toNumber(
+      statement?.profit_after_tax ??
+        0,
+    ) >= 0;
+
+  const totalEquityIsPositive =
+    toNumber(
+      statement?.total_closing_equity ??
+        0,
+    ) >= 0;
+
   return (
     <main className="financial-statement-page">
       <header className="app-topbar financial-statement-screen-only">
@@ -253,7 +263,7 @@ export function FinancialPositionWorkspace({
             </strong>
 
             <small>
-              Statement of Financial Position
+              Changes in Equity
             </small>
           </div>
         </Link>
@@ -268,17 +278,24 @@ export function FinancialPositionWorkspace({
 
           <Link
             className="topbar-link"
+            href={`/reports/${reportId}/statements/financial-position`}
+          >
+            Financial position
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/cash-flows`}
+          >
+            Cash flows
+          </Link>
+
+          <Link
+            className="topbar-link"
             href={`/reports/${reportId}/trial-balance`}
           >
             Trial Balance
           </Link>
-
-          <Link
-  className="topbar-link"
-  href={`/reports/${reportId}/statements/cash-flows`}
->
-  Cash flows
-</Link>
 
           <Link
             className="topbar-link"
@@ -286,13 +303,6 @@ export function FinancialPositionWorkspace({
           >
             Report overview
           </Link>
-
-          <Link
-  className="topbar-link"
-  href={`/reports/${reportId}/statements/changes-in-equity`}
->
-  Changes in equity
-</Link>
         </div>
       </header>
 
@@ -302,13 +312,13 @@ export function FinancialPositionWorkspace({
             handleAsOfSubmit
           }
         >
-          <label htmlFor="financial-position-date">
-            Statement as at
+          <label htmlFor="equity-statement-date">
+            Calculate up to
           </label>
 
           <div>
             <input
-              id="financial-position-date"
+              id="equity-statement-date"
               required
               type="date"
               min={
@@ -325,44 +335,49 @@ export function FinancialPositionWorkspace({
               }
             />
 
-            <button type="submit">
+            <button
+              type="submit"
+            >
               Recalculate
             </button>
           </div>
         </form>
 
         <div>
-  <button
-    className="text-button"
-    type="button"
-    disabled={
-      resourceState ===
-      "loading"
-    }
-    onClick={requestReload}
-  >
-    Refresh
-  </button>
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              resourceState ===
+              "loading"
+            }
+            onClick={
+              requestReload
+            }
+          >
+            Refresh
+          </button>
 
-  <StatementPrintActions
-    disabled={
-      resourceState !==
-      "ready"
-    }
-    documentTitle={`${
-      company?.name?.trim() ||
-      "Company"
-    } — Statement of Financial Position`}
-    suggestedFileName={`${
-      company?.name?.trim() ||
-      "Company"
-    } - Statement of Financial Position - ${
-      statement?.as_of ??
-      report?.period_end ??
-      "report"
-    }.pdf`}
-  />
-</div>
+          <StatementPrintActions
+            disabled={
+              resourceState !==
+                "ready" ||
+              !statement
+            }
+            documentTitle={`${
+              company?.name?.trim() ||
+              "Company"
+            } — Statement of Changes in Equity`}
+            suggestedFileName={`${
+              company?.name?.trim() ||
+              "Company"
+            } - Statement of Changes in Equity - ${
+              statement?.period_end ??
+              report?.period_end ??
+              "report"
+            }.pdf`}
+          />
+        </div>
       </section>
 
       <section
@@ -372,7 +387,8 @@ export function FinancialPositionWorkspace({
           "loading"
         }
       >
-        {resourceState === "loading" ? (
+        {resourceState ===
+        "loading" ? (
           <div className="financial-statement-loading financial-statement-screen-only">
             <div />
             <div />
@@ -381,15 +397,16 @@ export function FinancialPositionWorkspace({
           </div>
         ) : null}
 
-        {resourceState === "error" ? (
+        {resourceState ===
+        "error" ? (
           <div className="journal-state-card journal-state-card--error financial-statement-screen-only">
             <span>
               Calculation unavailable
             </span>
 
             <h2>
-              Statement of Financial Position
-              could not be calculated
+              Statement of Changes in
+              Equity could not be loaded
             </h2>
 
             <p>{loadError}</p>
@@ -406,24 +423,26 @@ export function FinancialPositionWorkspace({
           </div>
         ) : null}
 
-        {resourceState === "ready" &&
+        {resourceState ===
+          "ready" &&
         statement ? (
-          <article className="financial-statement-document">
+          <article className="financial-statement-document equity-statement-document">
             <header className="financial-statement-document__header">
               <div>
                 <p>
                   {company?.name?.trim() ||
-  "Company"}
+                    "Company"}
                 </p>
 
                 <h1>
-                  Statement of Financial Position
+                  Statement of Changes in
+                  Equity
                 </h1>
 
                 <span>
-                  As at{" "}
-                  {formatStatementDate(
-                    statement.as_of,
+                  {formatPeriod(
+                    statement.period_start,
+                    statement.period_end,
                   )}
                 </span>
               </div>
@@ -441,190 +460,165 @@ export function FinancialPositionWorkspace({
 
             <div className="financial-statement-document__body">
               <div className="financial-position-column-heading">
-                <span>Assets</span>
-              </div>
-
-              {sectionMap.get(
-                "non_current_assets",
-              ) ? (
-                <StatementSection
-                  currency={
-                    statement.currency
-                  }
-                  section={
-                    sectionMap.get(
-                      "non_current_assets",
-                    )!
-                  }
-                />
-              ) : null}
-
-              {sectionMap.get(
-                "current_assets",
-              ) ? (
-                <StatementSection
-                  currency={
-                    statement.currency
-                  }
-                  section={
-                    sectionMap.get(
-                      "current_assets",
-                    )!
-                  }
-                />
-              ) : null}
-
-              <div className="financial-statement-final-total">
-                <div>
-                  <span>
-                    Assets
-                  </span>
-
-                  <strong>
-                    Total Assets
-                  </strong>
-                </div>
-
-                <strong>
-                  <span>
-                    {
-                      statement.currency
-                    }
-                  </span>
-
-                  {formatStatementMoney(
-                    statement.total_assets,
-                  )}
-                </strong>
-              </div>
-
-              <div className="financial-position-column-heading">
                 <span>
-                  Equity and Liabilities
+                  Movement in Recorded Equity
                 </span>
               </div>
 
-              {sectionMap.get(
-                "equity",
-              ) ? (
-                <StatementSection
-                  currency={
-                    statement.currency
-                  }
-                  section={
-                    sectionMap.get(
-                      "equity",
-                    )!
-                  }
-                />
-              ) : null}
-
-              <div className="financial-statement-subtotal">
+              <div className="equity-opening-line">
                 <strong>
-                  Total Equity
+                  Opening Recorded Equity
                 </strong>
 
                 <strong>
                   <span>
-                    {
-                      statement.currency
-                    }
+                    {statement.currency}
                   </span>
 
                   {formatStatementMoney(
-                    statement.total_equity,
+                    statement
+                      .opening_recorded_equity,
                   )}
                 </strong>
               </div>
 
-              {sectionMap.get(
-                "non_current_liabilities",
-              ) ? (
-                <StatementSection
-                  currency={
-                    statement.currency
-                  }
-                  section={
-                    sectionMap.get(
-                      "non_current_liabilities",
-                    )!
-                  }
-                />
-              ) : null}
+              <EquityMovementSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .direct_increases
+                }
+              />
 
-              {sectionMap.get(
-                "current_liabilities",
-              ) ? (
-                <StatementSection
-                  currency={
-                    statement.currency
-                  }
-                  section={
-                    sectionMap.get(
-                      "current_liabilities",
-                    )!
-                  }
-                />
-              ) : null}
+              <EquityMovementSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .direct_decreases
+                }
+              />
 
               <div className="financial-statement-subtotal">
                 <strong>
-                  Total Liabilities
+                  Net Direct Movement in
+                  Equity
                 </strong>
 
                 <strong>
                   <span>
-                    {
-                      statement.currency
-                    }
+                    {statement.currency}
                   </span>
 
                   {formatStatementMoney(
-                    statement.total_liabilities,
+                    statement
+                      .net_direct_equity_movement,
                   )}
                 </strong>
               </div>
 
-              <div className="financial-statement-final-total">
+              <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                <strong>
+                  Recorded Closing Equity
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .recorded_closing_equity,
+                  )}
+                </strong>
+              </div>
+
+              <div
+                className={
+                  profitIsPositive
+                    ? "equity-profit-line equity-profit-line--positive"
+                    : "equity-profit-line equity-profit-line--negative"
+                }
+              >
                 <div>
                   <span>
-                    Equity and liabilities
+                    Financial performance
                   </span>
 
                   <strong>
-                    Total Equity and Liabilities
+                    {profitIsPositive
+                      ? "Profit After Tax"
+                      : "Loss After Tax"}
                   </strong>
                 </div>
 
                 <strong>
                   <span>
-                    {
-                      statement.currency
-                    }
+                    {statement.currency}
                   </span>
 
                   {formatStatementMoney(
-                    statement.total_liabilities_and_equity,
+                    statement
+                      .profit_after_tax,
                   )}
                 </strong>
               </div>
 
+              <div
+                className={
+                  totalEquityIsPositive
+                    ? "financial-statement-final-total financial-statement-final-total--positive"
+                    : "financial-statement-final-total financial-statement-final-total--negative"
+                }
+              >
+                <div>
+                  <span>
+                    Closing position
+                  </span>
+
+                  <strong>
+                    Total Closing Equity
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .total_closing_equity,
+                  )}
+                </strong>
+              </div>
+
+              <EquityAccountTable
+                statement={
+                  statement
+                }
+              />
+
               <section
                 className={
-                  statement.is_balanced
+                  statement.is_reconciled
                     ? "financial-position-validation financial-position-validation--balanced"
                     : "financial-position-validation financial-position-validation--error"
                 }
               >
                 <div>
                   <span>
-                    Accounting equation
+                    Equity reconciliation
                   </span>
 
                   <strong>
-                    {statement.is_balanced
-                      ? "Assets equal equity and liabilities"
-                      : "Statement is out of balance"}
+                    {statement.is_reconciled
+                      ? "Recorded equity movements reconcile"
+                      : "Equity movements require review"}
                   </strong>
 
                   <p>
@@ -632,23 +626,60 @@ export function FinancialPositionWorkspace({
                     {statement.currency}
                     {" "}
                     {formatStatementMoney(
-                      statement.accounting_equation_difference,
+                      statement
+                        .equity_reconciliation_difference,
                     )}
                   </p>
                 </div>
 
                 <span>
-                  {statement.is_balanced
-                    ? "Balanced"
+                  {statement.is_reconciled
+                    ? "Reconciled"
                     : "Review required"}
                 </span>
+              </section>
+
+              <section className="equity-reconciliation-detail">
+                <div>
+                  <span>
+                    Calculated recorded closing
+                    equity
+                  </span>
+
+                  <strong>
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .calculated_recorded_closing_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Actual recorded closing
+                    equity
+                  </span>
+
+                  <strong>
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .recorded_closing_equity,
+                    )}
+                  </strong>
+                </div>
               </section>
             </div>
 
             <footer className="financial-statement-document__footer">
               <span>
-                Current-year profit is included
-                automatically within equity.
+                Prepared from posted,
+                non-voided journal entries.
+                Current-year profit is shown
+                separately from recorded equity.
               </span>
 
               <span>

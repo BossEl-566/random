@@ -19,9 +19,8 @@ type DesktopInformation = {
  * This stable subscription therefore returns only a cleanup function.
  */
 function subscribeToDesktopInformation(
-  _onStoreChange: () => void,
 ): () => void {
-  return () => undefined;
+  return () => {};
 }
 
 function getDesktopInformationSnapshot():

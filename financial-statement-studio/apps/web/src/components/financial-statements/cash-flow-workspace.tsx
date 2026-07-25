@@ -458,6 +458,12 @@ export function CashFlowWorkspace({
           >
             Report overview
           </Link>
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/changes-in-equity`}
+>
+  Changes in equity
+</Link>
         </div>
       </header>
 

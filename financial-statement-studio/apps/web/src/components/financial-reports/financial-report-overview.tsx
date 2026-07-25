@@ -406,10 +406,31 @@ export function FinancialReportOverview({
     </Link>
 
     <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--equity"
+  href={`/reports/${report.id}/statements/changes-in-equity`}
+>
+  <span>05</span>
+
+  <h3>
+    Changes in Equity
+  </h3>
+
+  <p>
+    Review opening equity, owner
+    contributions, drawings, profit and
+    total closing equity.
+  </p>
+
+  <strong>
+    View statement →
+  </strong>
+</Link>
+
+    <Link
       className="report-launch-card report-launch-card--statement report-launch-card--cash-flow"
       href={`/reports/${report.id}/statements/cash-flows`}
     >
-      <span>05</span>
+      <span>06</span>
 
       <h3>
         Cash Flows
@@ -431,7 +452,7 @@ export function FinancialReportOverview({
         className="report-launch-card"
         href={`/companies/${company.id}/chart-of-accounts`}
       >
-        <span>06</span>
+        <span>07</span>
 
         <h3>
           Chart of Accounts
