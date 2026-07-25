@@ -447,12 +447,33 @@ export function FinancialReportOverview({
       </strong>
     </Link>
 
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--notes"
+  href={`/reports/${report.id}/notes`}
+>
+  <span>07</span>
+
+  <h3>
+    Notes and Disclosures
+  </h3>
+
+  <p>
+    Prepare accounting policies,
+    explanatory notes and supporting
+    statement disclosures.
+  </p>
+
+  <strong>
+    Manage notes →
+  </strong>
+</Link>
+
     {company ? (
       <Link
         className="report-launch-card"
         href={`/companies/${company.id}/chart-of-accounts`}
       >
-        <span>07</span>
+        <span>08</span>
 
         <h3>
           Chart of Accounts
@@ -469,6 +490,8 @@ export function FinancialReportOverview({
         </strong>
       </Link>
     ) : null}
+
+    
   </div>
 </section>
     </main>

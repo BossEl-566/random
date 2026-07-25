@@ -1,0 +1,1189 @@
+"use client";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
+import {
+  formatPeriod,
+} from "@/components/financial-statements/statement-utils";
+import { NoteEditorDialog } from "@/components/notes/note-editor-dialog";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import {
+  createFinancialReportNote,
+  deactivateFinancialReportNote,
+  initializeDisclosureTemplates,
+  initializeFinancialReportNotes,
+  listDisclosureTemplates,
+  listFinancialReportNotes,
+  reactivateFinancialReportNote,
+  reorderFinancialReportNotes,
+  updateFinancialReportNote,
+} from "@/lib/notes-api";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  FinancialReport,
+} from "@/types/financial-report";
+import type {
+  DisclosureTemplate,
+  FinancialReportNote,
+  FinancialReportNoteCreatePayload,
+} from "@/types/notes";
+import {
+  NOTE_TYPE_LABELS,
+  STATEMENT_NAME_LABELS,
+} from "@/types/notes";
+
+type NotesWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+type EditorState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      note: FinancialReportNote;
+    }
+  | null;
+
+type StatusMessage = {
+  type:
+    | "success"
+    | "error"
+    | "info";
+  text: string;
+} | null;
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function NotesWorkspace({
+  reportId,
+}: NotesWorkspaceProps) {
+  const [report, setReport] =
+    useState<FinancialReport | null>(
+      null,
+    );
+
+  const [company, setCompany] =
+    useState<Company | null>(
+      null,
+    );
+
+  const [notes, setNotes] =
+    useState<FinancialReportNote[]>(
+      [],
+    );
+
+  const [templates, setTemplates] =
+    useState<DisclosureTemplate[]>(
+      [],
+    );
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    includeInactive,
+    setIncludeInactive,
+  ] = useState(false);
+
+  const [
+    includeOptional,
+    setIncludeOptional,
+  ] = useState(true);
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  const [loadError, setLoadError] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    statusMessage,
+    setStatusMessage,
+  ] = useState<StatusMessage>(
+    null,
+  );
+
+  const [editorState, setEditorState] =
+    useState<EditorState>(
+      null,
+    );
+
+  const [isSaving, setIsSaving] =
+    useState(false);
+
+  const [
+    activeActionId,
+    setActiveActionId,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    isInitializing,
+    setIsInitializing,
+  ] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getFinancialReport(reportId)
+      .then(
+        async (
+          reportResponse,
+        ) => {
+          const [
+            companyResponse,
+            notesResponse,
+            templatesResponse,
+          ] = await Promise.all([
+            getCompany(
+              reportResponse.company_id,
+            ),
+
+            listFinancialReportNotes(
+              reportId,
+              includeInactive,
+            ),
+
+            listDisclosureTemplates(),
+          ]);
+
+          return {
+            reportResponse,
+            companyResponse,
+            notesResponse,
+            templatesResponse,
+          };
+        },
+      )
+      .then(
+        ({
+          reportResponse,
+          companyResponse,
+          notesResponse,
+          templatesResponse,
+        }) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            reportResponse,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setNotes(
+            notesResponse.items,
+          );
+
+          setTemplates(
+            templatesResponse.items,
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The report notes could not be loaded.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    includeInactive,
+    reloadVersion,
+    reportId,
+  ]);
+
+  const activeNotes =
+    useMemo(
+      () =>
+        notes
+          .filter(
+            (note) =>
+              note.is_active,
+          )
+          .sort(
+            (firstNote, secondNote) =>
+              firstNote.note_number -
+              secondNote.note_number,
+          ),
+      [notes],
+    );
+
+  const inactiveNotes =
+    useMemo(
+      () =>
+        notes
+          .filter(
+            (note) =>
+              !note.is_active,
+          )
+          .sort(
+            (firstNote, secondNote) =>
+              firstNote.note_number -
+              secondNote.note_number,
+          ),
+      [notes],
+    );
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  async function handleInitializeNotes(): Promise<void> {
+    setIsInitializing(true);
+    setStatusMessage(null);
+
+    try {
+      const templateResult =
+        await initializeDisclosureTemplates();
+
+      const noteResult =
+        await initializeFinancialReportNotes(
+          reportId,
+          includeOptional,
+        );
+
+      setStatusMessage({
+        type: "success",
+        text:
+          noteResult.created_count > 0
+            ? `${noteResult.created_count} report notes were created.`
+            : `No new notes were required. ${noteResult.skipped_count} existing notes were preserved.`,
+      });
+
+      if (
+        templateResult.created_count >
+        0
+      ) {
+        setStatusMessage({
+          type: "success",
+          text: `${templateResult.created_count} templates and ${noteResult.created_count} report notes were created.`,
+        });
+      }
+
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The standard notes could not be initialized.",
+        ),
+      });
+    } finally {
+      setIsInitializing(false);
+    }
+  }
+
+  async function handleSaveNote(
+    payload: FinancialReportNoteCreatePayload,
+  ): Promise<void> {
+    setIsSaving(true);
+    setStatusMessage(null);
+
+    try {
+      if (
+        editorState?.mode ===
+        "edit"
+      ) {
+        await updateFinancialReportNote(
+          editorState.note.id,
+          payload,
+        );
+
+        setStatusMessage({
+          type: "success",
+          text: "The report note was updated.",
+        });
+      } else {
+        await createFinancialReportNote(
+          reportId,
+          payload,
+        );
+
+        setStatusMessage({
+          type: "success",
+          text: "The report note was added.",
+        });
+      }
+
+      setEditorState(null);
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The report note could not be saved.",
+        ),
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDeactivate(
+    note: FinancialReportNote,
+  ): Promise<void> {
+    setActiveActionId(
+      note.id,
+    );
+
+    setStatusMessage(null);
+
+    try {
+      await deactivateFinancialReportNote(
+        note.id,
+      );
+
+      setStatusMessage({
+        type: "success",
+        text: `Note ${note.note_number} was removed from the active statements.`,
+      });
+
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The note could not be deactivated.",
+        ),
+      });
+    } finally {
+      setActiveActionId(null);
+    }
+  }
+
+  async function handleReactivate(
+    note: FinancialReportNote,
+  ): Promise<void> {
+    setActiveActionId(
+      note.id,
+    );
+
+    setStatusMessage(null);
+
+    try {
+      await reactivateFinancialReportNote(
+        note.id,
+      );
+
+      setStatusMessage({
+        type: "success",
+        text: "The note was restored to the active statements.",
+      });
+
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The note could not be reactivated.",
+        ),
+      });
+    } finally {
+      setActiveActionId(null);
+    }
+  }
+
+  async function moveNote(
+    noteId: string,
+    direction: "up" | "down",
+  ): Promise<void> {
+    const currentIndex =
+      activeNotes.findIndex(
+        (note) =>
+          note.id === noteId,
+      );
+
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const targetIndex =
+      direction === "up"
+        ? currentIndex - 1
+        : currentIndex + 1;
+
+    if (
+      targetIndex < 0 ||
+      targetIndex >=
+        activeNotes.length
+    ) {
+      return;
+    }
+
+    const reorderedIds =
+      activeNotes.map(
+        (note) => note.id,
+      );
+
+    [
+      reorderedIds[currentIndex],
+      reorderedIds[targetIndex],
+    ] = [
+      reorderedIds[targetIndex],
+      reorderedIds[currentIndex],
+    ];
+
+    setActiveActionId(
+      noteId,
+    );
+
+    setStatusMessage(null);
+
+    try {
+      await reorderFinancialReportNotes(
+        reportId,
+        {
+          note_ids:
+            reorderedIds,
+        },
+      );
+
+      setStatusMessage({
+        type: "success",
+        text: "The note order was updated.",
+      });
+
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The notes could not be reordered.",
+        ),
+      });
+    } finally {
+      setActiveActionId(null);
+    }
+  }
+
+  return (
+    <main className="financial-statement-page notes-page">
+      <header className="app-topbar notes-screen-only">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Notes and Disclosures
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/profit-or-loss`}
+          >
+            Profit or loss
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/financial-position`}
+          >
+            Financial position
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/cash-flows`}
+          >
+            Cash flows
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/changes-in-equity`}
+          >
+            Changes in equity
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+        </div>
+      </header>
+
+      <section className="notes-toolbar notes-screen-only">
+        <div>
+          <p className="eyebrow">
+            Financial statement disclosures
+          </p>
+
+          <h1>
+            Notes and Disclosures
+          </h1>
+
+          <p>
+            Prepare accounting policies,
+            explanatory notes and statement
+            cross-references for this report.
+          </p>
+        </div>
+
+        <div className="notes-toolbar__actions">
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={
+              resourceState ===
+              "loading"
+            }
+            onClick={requestReload}
+          >
+            Refresh
+          </button>
+
+          <button
+            className="primary-button"
+            type="button"
+            disabled={
+              resourceState !==
+              "ready"
+            }
+            onClick={() =>
+              setEditorState({
+                mode: "create",
+              })
+            }
+          >
+            Add note
+          </button>
+
+          <StatementPrintActions
+            disabled={
+              resourceState !==
+                "ready" ||
+              activeNotes.length === 0
+            }
+            documentTitle={`${
+              company?.name?.trim() ||
+              "Company"
+            } — Notes to the Financial Statements`}
+            suggestedFileName={`${
+              company?.name?.trim() ||
+              "Company"
+            } - Notes to the Financial Statements - ${
+              report?.period_end ??
+              "report"
+            }.pdf`}
+          />
+        </div>
+      </section>
+
+      <section className="notes-content">
+        {resourceState ===
+        "loading" ? (
+          <div className="financial-statement-loading notes-screen-only">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState ===
+        "error" ? (
+          <div className="journal-state-card journal-state-card--error notes-screen-only">
+            <span>
+              Notes unavailable
+            </span>
+
+            <h2>
+              Report notes could not be
+              loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={requestReload}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState ===
+        "ready" ? (
+          <>
+            <section className="notes-management-panel notes-screen-only">
+              <header>
+                <div>
+                  <h2>
+                    Report note manager
+                  </h2>
+
+                  <p>
+                    Active notes are printed
+                    in note-number order.
+                  </p>
+                </div>
+
+                <div className="notes-summary">
+                  <span>
+                    {activeNotes.length}
+                    {" "}
+                    active
+                  </span>
+
+                  <span>
+                    {inactiveNotes.length}
+                    {" "}
+                    inactive
+                  </span>
+                </div>
+              </header>
+
+              {statusMessage ? (
+                <div
+                  className={`notes-status notes-status--${statusMessage.type}`}
+                  role={
+                    statusMessage.type ===
+                    "error"
+                      ? "alert"
+                      : "status"
+                  }
+                >
+                  {statusMessage.text}
+                </div>
+              ) : null}
+
+              <section className="notes-initialization-card">
+                <div>
+                  <h3>
+                    Initialize standard notes
+                  </h3>
+
+                  <p>
+                    Add built-in accounting
+                    policies and disclosures
+                    without replacing notes
+                    already created.
+                  </p>
+                </div>
+
+                <div>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={
+                        includeOptional
+                      }
+                      disabled={
+                        isInitializing
+                      }
+                      onChange={(event) =>
+                        setIncludeOptional(
+                          event.target.checked,
+                        )
+                      }
+                    />
+
+                    <span>
+                      Include optional notes
+                    </span>
+                  </label>
+
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={
+                      isInitializing
+                    }
+                    onClick={() => {
+                      void handleInitializeNotes();
+                    }}
+                  >
+                    {isInitializing
+                      ? "Initializing..."
+                      : "Initialize standard notes"}
+                  </button>
+                </div>
+              </section>
+
+              <div className="notes-list-toolbar">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={
+                      includeInactive
+                    }
+                    onChange={(event) => {
+                      setResourceState(
+                        "loading",
+                      );
+
+                      setIncludeInactive(
+                        event.target.checked,
+                      );
+                    }}
+                  />
+
+                  <span>
+                    Show inactive notes
+                  </span>
+                </label>
+              </div>
+
+              <div className="notes-manager-list">
+                {activeNotes.length >
+                0 ? (
+                  activeNotes.map(
+                    (note, index) => (
+                      <article
+                        className="notes-manager-card"
+                        key={note.id}
+                      >
+                        <div className="notes-manager-card__number">
+                          <span>
+                            Note
+                          </span>
+
+                          <strong>
+                            {note.note_number}
+                          </strong>
+                        </div>
+
+                        <div className="notes-manager-card__content">
+                          <header>
+                            <div>
+                              <span>
+                                {
+                                  NOTE_TYPE_LABELS[
+                                    note.note_type
+                                  ]
+                                }
+                              </span>
+
+                              <h3>
+                                {note.title}
+                              </h3>
+                            </div>
+
+                            {note.statement_name ? (
+                              <strong>
+                                {
+                                  STATEMENT_NAME_LABELS[
+                                    note
+                                      .statement_name
+                                  ]
+                                }
+                              </strong>
+                            ) : null}
+                          </header>
+
+                          <p>
+                            {note.content ||
+                              "No note content has been entered."}
+                          </p>
+
+                          {note.statement_line_key ? (
+                            <small>
+                              Statement line:{" "}
+                              {
+                                note.statement_line_key
+                              }
+                            </small>
+                          ) : null}
+                        </div>
+
+                        <div className="notes-manager-card__actions">
+                          <button
+                            type="button"
+                            disabled={
+                              index === 0 ||
+                              activeActionId ===
+                                note.id
+                            }
+                            onClick={() => {
+                              void moveNote(
+                                note.id,
+                                "up",
+                              );
+                            }}
+                          >
+                            Move up
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
+                              index ===
+                                activeNotes.length -
+                                  1 ||
+                              activeActionId ===
+                                note.id
+                            }
+                            onClick={() => {
+                              void moveNote(
+                                note.id,
+                                "down",
+                              );
+                            }}
+                          >
+                            Move down
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
+                              activeActionId ===
+                              note.id
+                            }
+                            onClick={() =>
+                              setEditorState({
+                                mode: "edit",
+                                note,
+                              })
+                            }
+                          >
+                            Edit
+                          </button>
+
+                          <button
+                            className="notes-danger-action"
+                            type="button"
+                            disabled={
+                              activeActionId ===
+                              note.id
+                            }
+                            onClick={() => {
+                              void handleDeactivate(
+                                note,
+                              );
+                            }}
+                          >
+                            Deactivate
+                          </button>
+                        </div>
+                      </article>
+                    ),
+                  )
+                ) : (
+                  <div className="notes-empty-state">
+                    <span>
+                      No active notes
+                    </span>
+
+                    <h3>
+                      Add or initialize report
+                      notes
+                    </h3>
+
+                    <p>
+                      Active notes will appear
+                      here and in the printable
+                      disclosure document.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {includeInactive &&
+              inactiveNotes.length >
+                0 ? (
+                <section className="inactive-notes-section">
+                  <header>
+                    <h3>
+                      Inactive notes
+                    </h3>
+                  </header>
+
+                  {inactiveNotes.map(
+                    (note) => (
+                      <article
+                        key={note.id}
+                      >
+                        <div>
+                          <span>
+                            Former note{" "}
+                            {note.note_number}
+                          </span>
+
+                          <strong>
+                            {note.title}
+                          </strong>
+                        </div>
+
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={
+                            activeActionId ===
+                            note.id
+                          }
+                          onClick={() => {
+                            void handleReactivate(
+                              note,
+                            );
+                          }}
+                        >
+                          {activeActionId ===
+                          note.id
+                            ? "Restoring..."
+                            : "Reactivate"}
+                        </button>
+                      </article>
+                    ),
+                  )}
+                </section>
+              ) : null}
+            </section>
+
+            <article className="financial-statement-document notes-document">
+              <header className="financial-statement-document__header">
+                <div>
+                  <p>
+                    {company?.name?.trim() ||
+                      "Company"}
+                  </p>
+
+                  <h1>
+                    Notes to the Financial
+                    Statements
+                  </h1>
+
+                  {report ? (
+                    <span>
+                      {formatPeriod(
+                        report.period_start,
+                        report.period_end,
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="financial-statement-document__currency">
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {report?.currency ??
+                      "GHS"}
+                  </strong>
+                </div>
+              </header>
+
+              <div className="financial-statement-document__body notes-document__body">
+                {activeNotes.length >
+                0 ? (
+                  activeNotes.map(
+                    (note) => (
+                      <section
+                        className="printable-report-note"
+                        key={note.id}
+                      >
+                        <header>
+                          <span>
+                            {note.note_number}
+                          </span>
+
+                          <div>
+                            <h2>
+                              {note.title}
+                            </h2>
+
+                            <small>
+                              {
+                                NOTE_TYPE_LABELS[
+                                  note.note_type
+                                ]
+                              }
+                            </small>
+                          </div>
+                        </header>
+
+                        <div className="printable-report-note__content">
+                          {note.content ? (
+                            note.content
+                              .split(/\r?\n/)
+                              .map(
+                                (
+                                  paragraph,
+                                  paragraphIndex,
+                                ) => (
+                                  <p
+                                    key={`${note.id}-${paragraphIndex}`}
+                                  >
+                                    {paragraph ||
+                                      "\u00A0"}
+                                  </p>
+                                ),
+                              )
+                          ) : (
+                            <p>
+                              No disclosure
+                              content has been
+                              entered.
+                            </p>
+                          )}
+                        </div>
+
+                        {note.statement_name ? (
+                          <footer>
+                            <span>
+                              Related statement
+                            </span>
+
+                            <strong>
+                              {
+                                STATEMENT_NAME_LABELS[
+                                  note
+                                    .statement_name
+                                ]
+                              }
+
+                              {note.statement_line_key
+                                ? ` — ${note.statement_line_key}`
+                                : ""}
+                            </strong>
+                          </footer>
+                        ) : null}
+                      </section>
+                    ),
+                  )
+                ) : (
+                  <section className="notes-document-empty">
+                    <h2>
+                      No active disclosures
+                    </h2>
+
+                    <p>
+                      Add or initialize report
+                      notes before printing this
+                      document.
+                    </p>
+                  </section>
+                )}
+              </div>
+
+              <footer className="financial-statement-document__footer">
+                <span>
+                  These notes form an integral
+                  part of the financial
+                  statements.
+                </span>
+
+                <span>
+                  Financial Statement Studio
+                </span>
+              </footer>
+            </article>
+          </>
+        ) : null}
+      </section>
+
+      {editorState ? (
+        <NoteEditorDialog
+          key={
+            editorState.mode ===
+            "edit"
+              ? editorState.note.id
+              : "new-note"
+          }
+          templates={templates}
+          initialNote={
+            editorState.mode ===
+            "edit"
+              ? editorState.note
+              : undefined
+          }
+          isSaving={isSaving}
+          onCancel={() =>
+            setEditorState(null)
+          }
+          onSave={
+            handleSaveNote
+          }
+        />
+      ) : null}
+    </main>
+  );
+}

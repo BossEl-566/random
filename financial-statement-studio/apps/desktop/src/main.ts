@@ -74,16 +74,27 @@ function isAllowedStatementUrl(
     return false;
   }
 
-  try {
-    const parsedUrl =
-      new URL(targetUrl);
+try {
+  const parsedUrl =
+    new URL(targetUrl);
 
-    return /^\/reports\/[^/]+\/statements\/(profit-or-loss|financial-position|cash-flows|changes-in-equity)\/?$/.test(
-  parsedUrl.pathname,
-);
-  } catch {
-    return false;
-  }
+  const isStatementPage =
+    /^\/reports\/[^/]+\/statements\/(profit-or-loss|financial-position|cash-flows|changes-in-equity)\/?$/.test(
+      parsedUrl.pathname,
+    );
+
+  const isNotesPage =
+    /^\/reports\/[^/]+\/notes\/?$/.test(
+      parsedUrl.pathname,
+    );
+
+  return (
+    isStatementPage ||
+    isNotesPage
+  );
+} catch {
+  return false;
+}
 }
 
 function requireAllowedStatementSender(
