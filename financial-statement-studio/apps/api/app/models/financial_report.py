@@ -12,10 +12,17 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.core.database import Base
-from app.models.mixins import PrimaryKeyMixin, TimestampMixin
+from app.models.mixins import (
+    PrimaryKeyMixin,
+    TimestampMixin,
+)
 
 
 if TYPE_CHECKING:
@@ -23,7 +30,12 @@ if TYPE_CHECKING:
     from app.models.financial_report_note import (
         FinancialReportNote,
     )
-    from app.models.journal_entry import JournalEntry
+    from app.models.financial_report_version import (
+        FinancialReportVersion,
+    )
+    from app.models.journal_entry import (
+        JournalEntry,
+    )
 
 
 class FinancialReport(
@@ -34,8 +46,8 @@ class FinancialReport(
     """
     A financial-statement document belonging to one company.
 
-    Each reporting period is stored independently so that reports from
-    different years do not overwrite one another.
+    Each reporting period is stored independently so that reports
+    from different years and revisions do not overwrite one another.
     """
 
     __tablename__ = "financial_reports"
@@ -44,6 +56,10 @@ class FinancialReport(
         CheckConstraint(
             "period_end >= period_start",
             name="period_dates",
+        ),
+        CheckConstraint(
+            "revision_number > 0",
+            name="revision_number_positive",
         ),
     )
 
@@ -65,6 +81,31 @@ class FinancialReport(
         ),
         nullable=True,
         index=True,
+    )
+
+    revision_series_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+
+    revision_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+        index=True,
+    )
+
+    supersedes_report_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+
+    revision_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     title: Mapped[str] = mapped_column(
@@ -125,6 +166,16 @@ class FinancialReport(
         nullable=True,
     )
 
+    accountant_name: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    finalised_by: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
     finalised_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -135,29 +186,48 @@ class FinancialReport(
         back_populates="financial_reports",
     )
 
-    journal_entries: Mapped[list[JournalEntry]] = relationship(
-    "JournalEntry",
-    back_populates="financial_report",
-    cascade="all, delete-orphan",
-    passive_deletes=True,
-)
-    notes: Mapped[
-    list[FinancialReportNote]
-] = relationship(
-    "FinancialReportNote",
-    back_populates="financial_report",
-    cascade="all, delete-orphan",
-    passive_deletes=True,
-)
+    journal_entries: Mapped[
+        list[JournalEntry]
+    ] = relationship(
+        "JournalEntry",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
-    comparison_report: Mapped[FinancialReport | None] = relationship(
+    notes: Mapped[
+        list[FinancialReportNote]
+    ] = relationship(
+        "FinancialReportNote",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    versions: Mapped[
+        list[FinancialReportVersion]
+    ] = relationship(
+        "FinancialReportVersion",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=(
+            "FinancialReportVersion.revision_number"
+        ),
+    )
+
+    comparison_report: Mapped[
+        FinancialReport | None
+    ] = relationship(
         "FinancialReport",
         remote_side="FinancialReport.id",
         foreign_keys=[comparison_report_id],
         back_populates="comparison_dependents",
     )
 
-    comparison_dependents: Mapped[list[FinancialReport]] = relationship(
+    comparison_dependents: Mapped[
+        list[FinancialReport]
+    ] = relationship(
         "FinancialReport",
         foreign_keys=[comparison_report_id],
         back_populates="comparison_report",
@@ -167,5 +237,6 @@ class FinancialReport(
         return (
             f"FinancialReport(id={self.id!r}, "
             f"title={self.title!r}, "
+            f"revision={self.revision_number!r}, "
             f"status={self.status!r})"
         )

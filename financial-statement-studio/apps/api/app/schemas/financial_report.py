@@ -200,6 +200,11 @@ class FinancialReportResponse(BaseModel):
     company_id: str
     comparison_report_id: str | None
 
+    revision_series_id: str | None
+    revision_number: int
+    supersedes_report_id: str | None
+    revision_reason: str | None
+
     title: str
     report_type: ReportType
 
@@ -212,6 +217,9 @@ class FinancialReportResponse(BaseModel):
     status: ReportStatus
 
     accountant_report_text: str | None
+
+    accountant_name: str | None
+    finalised_by: str | None
     finalised_at: datetime | None
 
     created_at: datetime
