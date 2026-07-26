@@ -59,6 +59,7 @@ from app.services.equity_statement_service import (
     EquityStatementService,
 )
 from app.services.notes_service import (
+    LockedNotesReportError,
     NotesConflictError,
     NotesNotFoundError,
     NotesPersistenceError,
@@ -66,6 +67,16 @@ from app.services.notes_service import (
     NotesServiceError,
     NotesValidationError,
 )
+from app.services.report_finalisation_service import (
+    ReportFinalisationConflictError,
+    ReportFinalisationNotFoundError,
+    ReportFinalisationPersistenceError,
+    ReportFinalisationService,
+    ReportFinalisationServiceError,
+    ReportFinalisationValidationError,
+)
+
+
 
 
 __all__ = [
@@ -119,4 +130,11 @@ __all__ = [
     "NotesService",
     "NotesServiceError",
     "NotesValidationError",
+    "ReportFinalisationConflictError",
+    "ReportFinalisationNotFoundError",
+    "ReportFinalisationPersistenceError",
+    "ReportFinalisationService",
+    "ReportFinalisationServiceError",
+    "ReportFinalisationValidationError",
+    "LockedNotesReportError",
 ]

@@ -29,6 +29,19 @@ from app.services.financial_report_service import (
     InvalidFinancialReportPeriodError,
 )
 
+from app.services.financial_report_service import (
+    EmptyFinancialReportUpdateError,
+    FinancialReportCompanyNotFoundError,
+    FinancialReportNotFoundError,
+    FinancialReportPersistenceError,
+    FinancialReportService,
+    FinancialReportServiceError,
+    InactiveFinancialReportCompanyError,
+    InvalidComparisonReportError,
+    InvalidFinancialReportPeriodError,
+    LockedFinancialReportError,
+)
+
 
 router = APIRouter()
 financial_report_service = (
@@ -40,6 +53,17 @@ def raise_financial_report_http_error(
     error: FinancialReportServiceError,
 ) -> NoReturn:
     """Convert service errors into HTTP responses."""
+
+    if isinstance(
+        error,
+        LockedFinancialReportError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error
 
     if isinstance(
         error,

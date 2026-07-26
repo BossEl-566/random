@@ -19,6 +19,9 @@ from app.repositories.equity_statement_repository import (
 from app.repositories.notes_repository import (
     NotesRepository,
 )
+from app.repositories.report_finalisation_repository import (
+    ReportFinalisationRepository,
+)
 
 
 __all__ = [
@@ -29,4 +32,5 @@ __all__ = [
     "CashFlowRepository",
     "EquityStatementRepository",
     "NotesRepository",
+    "ReportFinalisationRepository",
 ]

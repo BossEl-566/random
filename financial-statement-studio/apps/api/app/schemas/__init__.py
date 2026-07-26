@@ -76,6 +76,17 @@ from app.schemas.notes import (
     ReportNotesInitializationResponse,
 )
 
+from app.schemas.report_finalisation import (
+    CreateFinancialReportRevisionRequest,
+    FinalisationCheck,
+    FinaliseFinancialReportRequest,
+    FinaliseFinancialReportResponse,
+    FinancialReportVersionListResponse,
+    FinancialReportVersionResponse,
+    FinancialReportVersionSummary,
+    ReportFinalisationReadinessResponse,
+)
+
 
 __all__ = [
     "AccountType",
@@ -137,4 +148,12 @@ __all__ = [
     "ReorderFinancialReportNotesRequest",
     "ReportNotesInitializationRequest",
     "ReportNotesInitializationResponse",
+    "CreateFinancialReportRevisionRequest",
+    "FinalisationCheck",
+    "FinaliseFinancialReportRequest",
+    "FinaliseFinancialReportResponse",
+    "FinancialReportVersionListResponse",
+    "FinancialReportVersionResponse",
+    "FinancialReportVersionSummary",
+    "ReportFinalisationReadinessResponse",
 ]

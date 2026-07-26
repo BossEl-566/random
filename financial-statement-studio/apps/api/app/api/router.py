@@ -29,6 +29,9 @@ from app.api.routes.equity_statements import (
 from app.api.routes.notes import (
     notes_router,
 )
+from app.api.routes.report_finalisation import (
+    router as report_finalisation_router,
+)
 
 
 
@@ -100,4 +103,11 @@ api_router.include_router(
 api_router.include_router(
     notes_router,
     tags=["Notes and Disclosures"],
+)
+
+api_router.include_router(
+    report_finalisation_router,
+    tags=[
+        "Report Finalisation",
+    ],
 )

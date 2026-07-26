@@ -25,6 +25,7 @@ from app.schemas.notes import (
     ReportNotesInitializationResponse,
 )
 from app.services.notes_service import (
+    LockedNotesReportError,
     NotesConflictError,
     NotesNotFoundError,
     NotesPersistenceError,
@@ -42,6 +43,17 @@ notes_service = NotesService()
 def raise_notes_http_error(
     error: NotesServiceError,
 ) -> NoReturn:
+    if isinstance(
+        error,
+        LockedNotesReportError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error
+
     if isinstance(
         error,
         NotesNotFoundError,

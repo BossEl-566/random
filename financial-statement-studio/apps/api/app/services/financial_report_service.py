@@ -16,6 +16,12 @@ from app.schemas.financial_report import (
     ReportType,
 )
 
+LOCKED_REPORT_STATUSES = {
+    "finalised",
+    "printed",
+    "archived",
+}
+
 
 class FinancialReportServiceError(Exception):
     """Base exception for financial-report operations."""
@@ -55,7 +61,10 @@ class EmptyFinancialReportUpdateError(
     FinancialReportServiceError,
 ):
     """Raised when an update contains no supplied fields."""
-
+class LockedFinancialReportError(
+    FinancialReportServiceError,
+):
+    """Raised when locked report metadata is changed."""
 
 class FinancialReportPersistenceError(
     FinancialReportServiceError,
@@ -368,6 +377,19 @@ class FinancialReportService:
             database_session,
             report_id,
         )
+
+        if (
+            financial_report.status
+            in LOCKED_REPORT_STATUSES
+        ):
+            raise LockedFinancialReportError(
+                (
+                    "The financial report cannot be edited "
+                    f"because its status is "
+                    f"'{financial_report.status}'. "
+                    "Create a new revision instead."
+                ),
+            )
 
         supplied_fields = payload.model_fields_set
 

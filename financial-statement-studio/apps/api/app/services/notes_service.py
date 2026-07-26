@@ -30,6 +30,12 @@ from app.schemas.notes import (
     ReportNotesInitializationResponse,
 )
 
+LOCKED_REPORT_STATUSES = {
+    "finalised",
+    "printed",
+    "archived",
+}
+
 
 class NotesServiceError(Exception):
     """Base exception for notes operations."""
@@ -52,6 +58,10 @@ class NotesConflictError(
 ):
     """Submitted data conflicts with existing data."""
 
+class LockedNotesReportError(
+    NotesServiceError,
+):
+    """A locked report cannot accept note changes."""
 
 class NotesPersistenceError(
     NotesServiceError,
@@ -376,6 +386,30 @@ class NotesService:
 
         return report
 
+    def require_report_editable(
+        self,
+        database_session: Session,
+        report_id: str,
+    ):
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        if (
+            report.status
+            in LOCKED_REPORT_STATUSES
+        ):
+            raise LockedNotesReportError(
+                (
+                    "Report notes cannot be changed "
+                    f"because the report status is "
+                    f"'{report.status}'. Create a "
+                    "new report revision instead."
+                ),
+            )
+
+        return report
     def require_template(
         self,
         database_session: Session,
@@ -1000,7 +1034,7 @@ class NotesService:
         report_id: str,
         payload: FinancialReportNoteCreate,
     ) -> FinancialReportNoteResponse:
-        self.require_report(
+        self.require_report_editable(
             database_session,
             report_id,
         )
@@ -1102,10 +1136,10 @@ class NotesService:
         payload:
             ReportNotesInitializationRequest,
     ) -> ReportNotesInitializationResponse:
-        self.require_report(
-            database_session,
-            report_id,
-        )
+        self.require_report_editable(
+        database_session,
+        report_id,
+    )
 
         templates = (
             self.repository.list_templates(
@@ -1247,6 +1281,11 @@ class NotesService:
         note = self.require_note(
             database_session,
             note_id,
+        )
+
+        self.require_report_editable(
+            database_session,
+            note.financial_report_id,
         )
 
         update_data = payload.model_dump(
@@ -1430,6 +1469,11 @@ class NotesService:
             note_id,
         )
 
+        self.require_report_editable(
+            database_session,
+            note.financial_report_id,
+        )
+
         note.is_active = is_active
 
         if is_active:
@@ -1478,10 +1522,10 @@ class NotesService:
         payload:
             ReorderFinancialReportNotesRequest,
     ) -> FinancialReportNoteListResponse:
-        self.require_report(
-            database_session,
-            report_id,
-        )
+        self.require_report_editable(
+        database_session,
+        report_id,
+    )
 
         try:
             self.renumber_notes(
