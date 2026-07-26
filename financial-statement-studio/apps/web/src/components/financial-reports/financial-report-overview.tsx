@@ -20,6 +20,7 @@ import {
   REPORT_TYPE_OPTIONS,
   type FinancialReport,
 } from "@/types/financial-report";
+import { ReportLockBanner } from "@/components/report-finalisation/report-lock-banner";
 
 type FinancialReportOverviewProps = {
   reportId: string;
@@ -320,7 +321,16 @@ export function FinancialReportOverview({
       </p>
     </div>
   </div>
-
+    {[
+  "finalised",
+  "printed",
+  "archived",
+].includes(report.status) ? (
+  <ReportLockBanner
+    reportId={report.id}
+    status={report.status}
+  />
+) : null}
   <div className="report-accounting-launchpad__grid">
     <Link
       className="report-launch-card"
@@ -491,7 +501,26 @@ export function FinancialReportOverview({
       </Link>
     ) : null}
 
-    
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
+  href={`/reports/${report.id}/finalisation`}
+>
+  <span>09</span>
+
+  <h3>
+    Finalisation and Versions
+  </h3>
+
+  <p>
+    Check readiness, approve the report,
+    verify immutable snapshots and create
+    controlled revisions.
+  </p>
+
+  <strong>
+    Review finalisation →
+  </strong>
+</Link>
   </div>
 </section>
     </main>
