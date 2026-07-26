@@ -90,6 +90,25 @@ export type DisclosureTemplateInitializationResponse = {
   items: DisclosureTemplate[];
 };
 
+export type DisclosureTemplateCreatePayload = {
+  template_key: string;
+  title: string;
+  note_type: NoteType;
+
+  statement_name?: StatementName | null;
+  statement_line_key?: string | null;
+
+  default_content?: string;
+
+  is_required?: boolean;
+  is_active?: boolean;
+
+  display_order?: number;
+};
+
+export type DisclosureTemplateUpdatePayload =
+  Partial<DisclosureTemplateCreatePayload>;
+
 export type FinancialReportNote = {
   id: string;
   financial_report_id: string;

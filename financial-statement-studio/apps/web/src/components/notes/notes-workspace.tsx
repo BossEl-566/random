@@ -579,6 +579,13 @@ export function NotesWorkspace({
           </Link>
 
           <Link
+  className="topbar-link"
+  href="/disclosure-templates"
+>
+  Template library
+</Link>
+
+          <Link
             className="topbar-link"
             href={`/reports/${reportId}`}
           >
@@ -605,6 +612,13 @@ export function NotesWorkspace({
         </div>
 
         <div className="notes-toolbar__actions">
+
+          <Link
+  className="secondary-button"
+  href="/disclosure-templates"
+>
+  Template library
+</Link>
           <button
             className="secondary-button"
             type="button"

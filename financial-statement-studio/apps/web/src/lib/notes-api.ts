@@ -1,7 +1,10 @@
 import { apiRequest } from "@/lib/api";
 import type {
+  DisclosureTemplate,
+  DisclosureTemplateCreatePayload,
   DisclosureTemplateInitializationResponse,
   DisclosureTemplateListResponse,
+  DisclosureTemplateUpdatePayload,
   FinancialReportNote,
   FinancialReportNoteCreatePayload,
   FinancialReportNoteListResponse,
@@ -68,6 +71,59 @@ export async function listDisclosureTemplates(
         ? `?${queryString}`
         : ""
     }`,
+  );
+}
+
+export async function createDisclosureTemplate(
+  payload: DisclosureTemplateCreatePayload,
+): Promise<DisclosureTemplate> {
+  return apiRequest<DisclosureTemplate>(
+    "/api/disclosure-templates",
+    jsonRequest(
+      "POST",
+      payload,
+    ),
+  );
+}
+
+export async function updateDisclosureTemplate(
+  templateId: string,
+  payload: DisclosureTemplateUpdatePayload,
+): Promise<DisclosureTemplate> {
+  return apiRequest<DisclosureTemplate>(
+    `/api/disclosure-templates/${encodeURIComponent(
+      templateId,
+    )}`,
+    jsonRequest(
+      "PATCH",
+      payload,
+    ),
+  );
+}
+
+export async function deactivateDisclosureTemplate(
+  templateId: string,
+): Promise<DisclosureTemplate> {
+  return apiRequest<DisclosureTemplate>(
+    `/api/disclosure-templates/${encodeURIComponent(
+      templateId,
+    )}/deactivate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function reactivateDisclosureTemplate(
+  templateId: string,
+): Promise<DisclosureTemplate> {
+  return apiRequest<DisclosureTemplate>(
+    `/api/disclosure-templates/${encodeURIComponent(
+      templateId,
+    )}/reactivate`,
+    {
+      method: "POST",
+    },
   );
 }
 
