@@ -86,6 +86,24 @@ from app.schemas.report_finalisation import (
     FinancialReportVersionSummary,
     ReportFinalisationReadinessResponse,
 )
+from app.schemas.tax_configuration import (
+    TaxCalculationListResponse,
+    TaxCalculationMethod,
+    TaxCalculationPreviewRequest,
+    TaxCalculationPreviewResponse,
+    TaxCalculationResponse,
+    TaxCalculationStatus,
+    TaxProfileCreate,
+    TaxProfileListResponse,
+    TaxProfileResponse,
+    TaxProfileUpdate,
+    TaxRuleCreate,
+    TaxRuleListResponse,
+    TaxRuleResponse,
+    TaxRuleRetireRequest,
+    TaxRuleStatus,
+    TaxRuleUpdate,
+)
 
 
 __all__ = [
@@ -156,4 +174,20 @@ __all__ = [
     "FinancialReportVersionResponse",
     "FinancialReportVersionSummary",
     "ReportFinalisationReadinessResponse",
+    "TaxCalculationListResponse",
+    "TaxCalculationMethod",
+    "TaxCalculationPreviewRequest",
+    "TaxCalculationPreviewResponse",
+    "TaxCalculationResponse",
+    "TaxCalculationStatus",
+    "TaxProfileCreate",
+    "TaxProfileListResponse",
+    "TaxProfileResponse",
+    "TaxProfileUpdate",
+    "TaxRuleCreate",
+    "TaxRuleListResponse",
+    "TaxRuleResponse",
+    "TaxRuleRetireRequest",
+    "TaxRuleStatus",
+    "TaxRuleUpdate",
 ]

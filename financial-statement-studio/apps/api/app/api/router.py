@@ -32,6 +32,9 @@ from app.api.routes.notes import (
 from app.api.routes.report_finalisation import (
     router as report_finalisation_router,
 )
+from app.api.routes.tax_configuration import (
+    router as tax_configuration_router,
+)
 
 
 
@@ -110,4 +113,9 @@ api_router.include_router(
     tags=[
         "Report Finalisation",
     ],
+)
+
+api_router.include_router(
+    tax_configuration_router,
+    tags=["Tax Configuration"],
 )

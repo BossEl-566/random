@@ -75,7 +75,14 @@ from app.services.report_finalisation_service import (
     ReportFinalisationServiceError,
     ReportFinalisationValidationError,
 )
-
+from app.services.tax_configuration_service import (
+    TaxConfigurationConflictError,
+    TaxConfigurationNotFoundError,
+    TaxConfigurationPersistenceError,
+    TaxConfigurationService,
+    TaxConfigurationServiceError,
+    TaxConfigurationValidationError,
+)
 
 
 
@@ -137,4 +144,10 @@ __all__ = [
     "ReportFinalisationServiceError",
     "ReportFinalisationValidationError",
     "LockedNotesReportError",
+    "TaxConfigurationConflictError",
+    "TaxConfigurationNotFoundError",
+    "TaxConfigurationPersistenceError",
+    "TaxConfigurationService",
+    "TaxConfigurationServiceError",
+    "TaxConfigurationValidationError",
 ]
