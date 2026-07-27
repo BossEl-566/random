@@ -29,6 +29,9 @@ from app.schemas.tax_configuration import (
     TaxRuleRetireRequest,
     TaxRuleStatus,
     TaxRuleUpdate,
+    PostTaxAdjustmentRequest,
+    PostTaxAdjustmentResponse,
+    TaxReconciliationResponse,
 )
 from app.services.tax_configuration_service import (
     TaxConfigurationConflictError,
@@ -540,6 +543,71 @@ def list_tax_calculations(
             .list_calculations(
                 database_session,
                 report_id,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+@router.get(
+    (
+        "/financial-reports/{report_id}"
+        "/tax-reconciliation"
+    ),
+    response_model=(
+        TaxReconciliationResponse
+    ),
+)
+def get_tax_reconciliation(
+    report_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxReconciliationResponse:
+    """Compare configured tax with taxation posted to the ledger."""
+
+    try:
+        return (
+            tax_configuration_service
+            .get_reconciliation(
+                database_session,
+                report_id,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.post(
+    (
+        "/financial-reports/{report_id}"
+        "/tax-reconciliation"
+        "/post-adjustment"
+    ),
+    response_model=(
+        PostTaxAdjustmentResponse
+    ),
+    status_code=status.HTTP_201_CREATED,
+)
+def post_tax_adjustment(
+    report_id: str,
+    payload:
+        PostTaxAdjustmentRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> PostTaxAdjustmentResponse:
+    """
+    Post only the outstanding difference between calculated tax
+    and taxation already recorded in the ledger.
+    """
+
+    try:
+        return (
+            tax_configuration_service
+            .post_tax_adjustment(
+                database_session,
+                report_id=report_id,
+                payload=payload,
             )
         )
     except TaxConfigurationServiceError as error:

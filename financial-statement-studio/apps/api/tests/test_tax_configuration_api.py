@@ -703,3 +703,518 @@ def test_inactive_profile_cannot_supply_rules(
         create_rule_response.status_code
         == 400
     )
+
+def initialize_tax_chart(
+    client: TestClient,
+    company_id: str,
+) -> None:
+    """
+    Initialize the company's default Chart of Accounts.
+    """
+
+    response = client.post(
+        (
+            f"/api/companies/{company_id}"
+            "/chart-of-accounts/initialize"
+        ),
+    )
+
+    assert response.status_code == 200, (
+        "Chart of Accounts initialization failed: "
+        f"{response.status_code} "
+        f"{response.text}"
+    )
+
+
+def get_tax_accounts(
+    client: TestClient,
+    company_id: str,
+) -> dict[
+    str,
+    dict[str, object],
+]:
+    response = client.get(
+        (
+            f"/api/companies/{company_id}"
+            "/chart-of-accounts"
+        ),
+        params={
+            "limit": 500,
+        },
+    )
+
+    assert response.status_code == 200, (
+        "Chart of Accounts could not be retrieved: "
+        f"{response.status_code} "
+        f"{response.text}"
+    )
+
+    return {
+        account["account_name"]: account
+        for account
+        in response.json()["items"]
+    }
+
+
+def post_manual_taxation(
+    client: TestClient,
+    *,
+    report_id: str,
+    tax_expense_account_id: str,
+    tax_payable_account_id: str,
+    amount: str,
+) -> dict[str, object]:
+    create_response = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report_id}/journal-entries"
+        ),
+        json={
+            "entry_date":
+                "2025-12-31",
+            "entry_type":
+                "adjusting",
+            "source":
+                "manual",
+            "description":
+                "Manual income tax provision",
+            "reference":
+                "MANUAL-TAX",
+            "lines": [
+                {
+                    "ledger_account_id": (
+                        tax_expense_account_id
+                    ),
+                    "description": (
+                        "Manual tax expense"
+                    ),
+                    "debit": amount,
+                    "credit": "0.00",
+                },
+                {
+                    "ledger_account_id": (
+                        tax_payable_account_id
+                    ),
+                    "description": (
+                        "Manual tax payable"
+                    ),
+                    "debit": "0.00",
+                    "credit": amount,
+                },
+            ],
+        },
+    )
+
+    assert (
+        create_response.status_code
+        == 201
+    )
+
+    journal_entry = (
+        create_response.json()
+    )
+
+    post_response = client.post(
+        (
+            "/api/journal-entries/"
+            f"{journal_entry['id']}"
+            "/post"
+        ),
+    )
+
+    assert post_response.status_code == 200
+
+    return post_response.json()
+
+
+def prepare_tax_reconciliation_scenario(
+    client: TestClient,
+    *,
+    manual_taxation: str,
+) -> tuple[
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+    dict[str, dict[str, object]],
+]:
+    company = create_company(client)
+
+    report = create_report(
+        client,
+        str(company["id"]),
+    )
+
+    initialize_tax_chart(
+        client,
+        str(company["id"]),
+    )
+
+    accounts = get_tax_accounts(
+        client,
+        str(company["id"]),
+    )
+
+    profile = create_profile(
+        client,
+        str(company["id"]),
+        profile_code=(
+            "RECONCILIATION"
+        ),
+        profile_name=(
+            "Reconciliation Profile"
+        ),
+    )
+
+    rule = create_percentage_rule(
+        client,
+        str(profile["id"]),
+        effective_from="2025-01-01",
+    )
+
+    activate_response = client.post(
+        (
+            "/api/tax-rules/"
+            f"{rule['id']}/activate"
+        ),
+    )
+
+    assert (
+        activate_response.status_code
+        == 200
+    )
+
+    calculation_response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-calculations"
+        ),
+        json={
+            "tax_profile_id":
+                profile["id"],
+            "rule_code":
+                "CIT-STANDARD",
+            "calculation_date":
+                "2025-12-31",
+            "tax_base":
+                "1000.00",
+        },
+    )
+
+    assert (
+        calculation_response.status_code
+        == 201
+    )
+
+    calculation = (
+        calculation_response.json()
+    )
+
+    if (
+        Decimal(manual_taxation)
+        > Decimal("0.00")
+    ):
+        post_manual_taxation(
+            client,
+            report_id=str(
+                report["id"],
+            ),
+            tax_expense_account_id=str(
+                accounts[
+                    "Income Tax Expense"
+                ]["id"],
+            ),
+            tax_payable_account_id=str(
+                accounts[
+                    "Tax Payable"
+                ]["id"],
+            ),
+            amount=manual_taxation,
+        )
+
+    return (
+        report,
+        calculation,
+        profile,
+        accounts,
+    )
+
+
+def test_tax_reconciliation_reports_outstanding_difference(
+    client: TestClient,
+) -> None:
+    report, _calculation, _profile, _accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="100.00",
+        )
+    )
+
+    response = client.get(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+        ),
+    )
+
+    assert response.status_code == 200
+
+    reconciliation = response.json()
+
+    assert Decimal(
+        reconciliation[
+            "configured_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation[
+            "ledger_taxation"
+        ],
+    ) == Decimal("100.00")
+
+    assert Decimal(
+        reconciliation["difference"],
+    ) == Decimal("150.00")
+
+    assert (
+        reconciliation["status"]
+        == "under_posted"
+    )
+
+    assert (
+        reconciliation[
+            "requires_attention"
+        ]
+        is True
+    )
+
+
+def test_existing_manual_tax_requires_acknowledgement(
+    client: TestClient,
+) -> None:
+    report, _calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="100.00",
+        )
+    )
+
+    response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Post the outstanding "
+                "configured income tax."
+            ),
+            "acknowledge_existing_taxation":
+                False,
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_tax_adjustment_posts_only_difference(
+    client: TestClient,
+) -> None:
+    report, calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="100.00",
+        )
+    )
+
+    response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Post only the difference "
+                "after reviewing the manual "
+                "tax provision."
+            ),
+            "acknowledge_existing_taxation":
+                True,
+        },
+    )
+
+    assert response.status_code == 201
+
+    payload = response.json()
+
+    assert Decimal(
+        payload[
+            "journal_entry"
+        ]["total_debit"],
+    ) == Decimal("150.00")
+
+    assert Decimal(
+        payload[
+            "journal_entry"
+        ]["total_credit"],
+    ) == Decimal("150.00")
+
+    reconciliation = payload[
+        "reconciliation"
+    ]
+
+    assert Decimal(
+        reconciliation[
+            "ledger_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation[
+            "configured_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation["difference"],
+    ) == Decimal("0.00")
+
+    assert (
+        reconciliation["status"]
+        == "reconciled"
+    )
+
+    calculation_response = client.get(
+        (
+            "/api/tax-calculations/"
+            f"{calculation['id']}"
+        ),
+    )
+
+    assert (
+        calculation_response.status_code
+        == 200
+    )
+
+    assert (
+        calculation_response.json()[
+            "status"
+        ]
+        == "confirmed"
+    )
+
+    statement_response = client.get(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/statements/profit-or-loss"
+        ),
+    )
+
+    assert (
+        statement_response.status_code
+        == 200
+    )
+
+    assert Decimal(
+        statement_response.json()[
+            "taxation"
+        ],
+    ) == Decimal("250.00")
+
+
+def test_over_posted_tax_is_not_reversed_automatically(
+    client: TestClient,
+) -> None:
+    report, _calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="300.00",
+        )
+    )
+
+    reconciliation_response = client.get(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+        ),
+    )
+
+    assert (
+        reconciliation_response.status_code
+        == 200
+    )
+
+    assert (
+        reconciliation_response.json()[
+            "status"
+        ]
+        == "over_posted"
+    )
+
+    assert Decimal(
+        reconciliation_response.json()[
+            "difference"
+        ],
+    ) == Decimal("-50.00")
+
+    posting_response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Attempt automatic reversal."
+            ),
+            "acknowledge_existing_taxation":
+                True,
+        },
+    )
+
+    assert posting_response.status_code == 409

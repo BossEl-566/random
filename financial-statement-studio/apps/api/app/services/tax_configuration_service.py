@@ -24,6 +24,13 @@ from app.models.tax_rule import TaxRule
 from app.repositories.tax_configuration_repository import (
     TaxConfigurationRepository,
 )
+from app.schemas.journal_entry import (
+    JournalEntryCreate,
+    JournalEntryResponse,
+    JournalEntryType,
+    JournalLineInput,
+    JournalSource,
+)
 from app.schemas.tax_configuration import (
     TaxCalculationListResponse,
     TaxCalculationMethod,
@@ -40,10 +47,33 @@ from app.schemas.tax_configuration import (
     TaxRuleRetireRequest,
     TaxRuleStatus,
     TaxRuleUpdate,
+    PostTaxAdjustmentRequest,
+    PostTaxAdjustmentResponse,
+    TaxCalculationStatus,
+    TaxReconciliationResponse,
+    TaxReconciliationStatus,
+)
+
+from app.services.journal_entry_service import (
+    JournalEntryPersistenceError,
+    JournalEntryService,
+    JournalEntryServiceError,
 )
 
 
+
+
 MONEY_QUANTUM = Decimal("0.01")
+
+def normalise_money(
+    value: Decimal,
+) -> Decimal:
+    """Round a monetary result consistently to two decimal places."""
+
+    return value.quantize(
+        MONEY_QUANTUM,
+        rounding=ROUND_HALF_UP,
+    )
 
 LOCKED_REPORT_STATUSES = {
     "finalised",
@@ -94,10 +124,18 @@ class TaxConfigurationService:
         repository:
             TaxConfigurationRepository
             | None = None,
+        journal_entry_service:
+            JournalEntryService
+            | None = None,
     ) -> None:
         self.repository = (
             repository
             or TaxConfigurationRepository()
+        )
+
+        self.journal_entry_service = (
+            journal_entry_service
+            or JournalEntryService()
         )
 
     def commit(
@@ -1403,4 +1441,632 @@ class TaxConfigurationService:
 
         return TaxCalculationResponse.model_validate(
             calculation,
+        )
+    def get_reconciliation(
+        self,
+        database_session: Session,
+        report_id: str,
+    ) -> TaxReconciliationResponse:
+        """
+        Compare configured tax with taxation already posted to the ledger.
+
+        The ledger remains authoritative for the financial statements.
+        Configured calculations are advisory until an accounting journal
+        has been posted.
+        """
+
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        try:
+            trial_balance = (
+                self.journal_entry_service
+                .calculate_trial_balance(
+                    database_session,
+                    report_id=report.id,
+                    as_of=report.period_end,
+                )
+            )
+
+            calculations = (
+                self.repository
+                .list_calculations(
+                    database_session,
+                    report.id,
+                )
+            )
+        except JournalEntryPersistenceError as error:
+            raise TaxConfigurationPersistenceError(
+                "Tax reconciliation could not retrieve the Trial Balance.",
+            ) from error
+        except SQLAlchemyError as error:
+            raise TaxConfigurationPersistenceError(
+                "Tax reconciliation could not be calculated.",
+            ) from error
+
+        ledger_taxation = Decimal(
+            "0.00",
+        )
+
+        ledger_profit_after_tax = Decimal(
+            "0.00",
+        )
+
+        for item in trial_balance.items:
+            account_type = getattr(
+                item.account_type,
+                "value",
+                item.account_type,
+            )
+
+            report_category = getattr(
+                item.report_category,
+                "value",
+                item.report_category,
+            )
+
+            account_net_debit = (
+                item.debit_balance
+                - item.credit_balance
+            )
+
+            account_net_credit = (
+                item.credit_balance
+                - item.debit_balance
+            )
+
+            if (
+                report_category
+                == "taxation"
+            ):
+                ledger_taxation += (
+                    account_net_debit
+                )
+
+            if account_type == "revenue":
+                ledger_profit_after_tax += (
+                    account_net_credit
+                )
+
+            elif account_type == "expense":
+                ledger_profit_after_tax -= (
+                    account_net_debit
+                )
+
+        ledger_taxation = normalise_money(
+            ledger_taxation,
+        )
+
+        ledger_profit_after_tax = (
+            normalise_money(
+                ledger_profit_after_tax,
+            )
+        )
+
+        profit_before_tax = (
+            normalise_money(
+                ledger_profit_after_tax
+                + ledger_taxation,
+            )
+        )
+
+        configured_taxation = (
+            normalise_money(
+                sum(
+                    (
+                        calculation.tax_amount
+                        for calculation
+                        in calculations
+                    ),
+                    Decimal("0.00"),
+                ),
+            )
+        )
+
+        confirmed_configured_taxation = (
+            normalise_money(
+                sum(
+                    (
+                        calculation.tax_amount
+                        for calculation
+                        in calculations
+                        if calculation.status
+                        == (
+                            TaxCalculationStatus
+                            .CONFIRMED
+                            .value
+                        )
+                    ),
+                    Decimal("0.00"),
+                ),
+            )
+        )
+
+        draft_configured_taxation = (
+            normalise_money(
+                sum(
+                    (
+                        calculation.tax_amount
+                        for calculation
+                        in calculations
+                        if calculation.status
+                        == (
+                            TaxCalculationStatus
+                            .DRAFT
+                            .value
+                        )
+                    ),
+                    Decimal("0.00"),
+                ),
+            )
+        )
+
+        difference = normalise_money(
+            configured_taxation
+            - ledger_taxation,
+        )
+
+        configured_profit_after_tax = (
+            normalise_money(
+                profit_before_tax
+                - configured_taxation,
+            )
+        )
+
+        has_draft_calculations = any(
+            calculation.status
+            == (
+                TaxCalculationStatus
+                .DRAFT
+                .value
+            )
+            for calculation
+            in calculations
+        )
+
+        if not calculations:
+            reconciliation_status = (
+                TaxReconciliationStatus
+                .NOT_CONFIGURED
+            )
+
+            requires_attention = False
+
+        elif difference > Decimal(
+            "0.00",
+        ):
+            reconciliation_status = (
+                TaxReconciliationStatus
+                .UNDER_POSTED
+            )
+
+            requires_attention = True
+
+        elif difference < Decimal(
+            "0.00",
+        ):
+            reconciliation_status = (
+                TaxReconciliationStatus
+                .OVER_POSTED
+            )
+
+            requires_attention = True
+
+        else:
+            reconciliation_status = (
+                TaxReconciliationStatus
+                .RECONCILED
+            )
+
+            requires_attention = (
+                has_draft_calculations
+            )
+
+        return TaxReconciliationResponse(
+            financial_report_id=(
+                report.id
+            ),
+            currency=report.currency,
+            as_of=report.period_end,
+            profit_before_tax=(
+                profit_before_tax
+            ),
+            ledger_taxation=(
+                ledger_taxation
+            ),
+            configured_taxation=(
+                configured_taxation
+            ),
+            confirmed_configured_taxation=(
+                confirmed_configured_taxation
+            ),
+            draft_configured_taxation=(
+                draft_configured_taxation
+            ),
+            difference=difference,
+            ledger_profit_after_tax=(
+                ledger_profit_after_tax
+            ),
+            configured_profit_after_tax=(
+                configured_profit_after_tax
+            ),
+            status=(
+                reconciliation_status
+            ),
+            requires_attention=(
+                requires_attention
+            ),
+            calculations=[
+                TaxCalculationResponse
+                .model_validate(
+                    calculation,
+                )
+                for calculation
+                in calculations
+            ],
+            generated_at=utc_now(),
+        )
+
+    def post_tax_adjustment(
+        self,
+        database_session: Session,
+        *,
+        report_id: str,
+        payload:
+            PostTaxAdjustmentRequest,
+    ) -> PostTaxAdjustmentResponse:
+        """
+        Post only the outstanding configured tax amount.
+
+        Existing manual taxation entries are preserved. The system does
+        not overwrite, reverse or duplicate them.
+        """
+
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        self.ensure_report_editable(
+            report,
+        )
+
+        reconciliation = (
+            self.get_reconciliation(
+                database_session,
+                report.id,
+            )
+        )
+
+        if not reconciliation.calculations:
+            raise TaxConfigurationValidationError(
+                "Record at least one tax calculation before posting taxation.",
+            )
+
+        if reconciliation.difference == Decimal(
+            "0.00",
+        ):
+            raise TaxConfigurationConflictError(
+                "Configured taxation already agrees with the posted ledger taxation.",
+            )
+
+        if reconciliation.difference < Decimal(
+            "0.00",
+        ):
+            raise TaxConfigurationConflictError(
+                (
+                    "Ledger taxation exceeds configured taxation by "
+                    f"{abs(reconciliation.difference):.2f}. "
+                    "A controlled automatic posting cannot reduce or "
+                    "reverse existing tax journals. Review the existing "
+                    "tax entries manually."
+                ),
+            )
+
+        if (
+            reconciliation.ledger_taxation
+            > Decimal("0.00")
+            and not (
+                payload
+                .acknowledge_existing_taxation
+            )
+        ):
+            raise TaxConfigurationConflictError(
+                (
+                    "Taxation has already been posted manually. "
+                    "Confirm that the existing taxation has been "
+                    "reviewed before posting only the outstanding "
+                    "difference."
+                ),
+            )
+
+        if (
+            payload.tax_expense_account_id
+            == payload.tax_payable_account_id
+        ):
+            raise TaxConfigurationValidationError(
+                "The tax expense and tax payable accounts must be different.",
+            )
+
+        account_ids = {
+            payload.tax_expense_account_id,
+            payload.tax_payable_account_id,
+        }
+
+        try:
+            accounts_by_id = (
+                self.journal_entry_service
+                .validate_accounts(
+                    database_session,
+                    company_id=(
+                        report.company_id
+                    ),
+                    account_ids=(
+                        account_ids
+                    ),
+                    require_active=True,
+                )
+            )
+        except JournalEntryPersistenceError as error:
+            raise TaxConfigurationPersistenceError(
+                "The selected tax accounts could not be retrieved.",
+            ) from error
+        except JournalEntryServiceError as error:
+            raise TaxConfigurationValidationError(
+                str(error),
+            ) from error
+
+        tax_expense_account = (
+            accounts_by_id[
+                payload
+                .tax_expense_account_id
+            ]
+        )
+
+        tax_payable_account = (
+            accounts_by_id[
+                payload
+                .tax_payable_account_id
+            ]
+        )
+
+        if (
+            tax_expense_account.account_type
+            != "expense"
+            or (
+                tax_expense_account
+                .report_category
+                != "taxation"
+            )
+        ):
+            raise TaxConfigurationValidationError(
+                (
+                    "The selected tax expense account must be "
+                    "an expense account classified under taxation."
+                ),
+            )
+
+        if (
+            tax_payable_account.account_type
+            != "liability"
+            or (
+                tax_payable_account
+                .report_category
+                != "current_liabilities"
+            )
+        ):
+            raise TaxConfigurationValidationError(
+                (
+                    "The selected tax payable account must be "
+                    "a current-liability account."
+                ),
+            )
+
+        posting_date = (
+            payload.entry_date
+            or report.period_end
+        )
+
+        adjustment_amount = (
+            reconciliation.difference
+        )
+
+        journal_payload = (
+            JournalEntryCreate(
+                entry_date=posting_date,
+                entry_type=(
+                    JournalEntryType
+                    .ADJUSTING
+                ),
+                source=(
+                    JournalSource.SYSTEM
+                ),
+                description=(
+                    "Configured tax adjustment: "
+                    f"{payload.reason}"
+                ),
+                reference=(
+                    "TAX-ADJ-"
+                    f"{report.financial_year}"
+                ),
+                lines=[
+                    JournalLineInput(
+                        ledger_account_id=(
+                            tax_expense_account.id
+                        ),
+                        description=(
+                            "Current income tax expense"
+                        ),
+                        debit=(
+                            adjustment_amount
+                        ),
+                        credit=Decimal(
+                            "0.00",
+                        ),
+                    ),
+                    JournalLineInput(
+                        ledger_account_id=(
+                            tax_payable_account.id
+                        ),
+                        description=(
+                            "Current income tax payable"
+                        ),
+                        debit=Decimal(
+                            "0.00",
+                        ),
+                        credit=(
+                            adjustment_amount
+                        ),
+                    ),
+                ],
+            )
+        )
+
+        try:
+            journal_entry = (
+                self.journal_entry_service
+                .create_entry(
+                    database_session,
+                    report.id,
+                    journal_payload,
+                )
+            )
+
+            posted_entry = (
+                self.journal_entry_service
+                .post_entry(
+                    database_session,
+                    journal_entry.id,
+                )
+            )
+        except JournalEntryPersistenceError as error:
+            raise TaxConfigurationPersistenceError(
+                "The tax-adjustment journal could not be saved.",
+            ) from error
+        except JournalEntryServiceError as error:
+            raise TaxConfigurationConflictError(
+                str(error),
+            ) from error
+
+        calculations = (
+            self.repository
+            .list_calculations(
+                database_session,
+                report.id,
+            )
+        )
+
+        for calculation in calculations:
+            if (
+                calculation.status
+                != (
+                    TaxCalculationStatus
+                    .DRAFT
+                    .value
+                )
+            ):
+                continue
+
+            try:
+                details = (
+                    json.loads(
+                        calculation
+                        .calculation_details_json
+                    )
+                    if (
+                        calculation
+                        .calculation_details_json
+                    )
+                    else {}
+                )
+            except json.JSONDecodeError:
+                details = {}
+
+            if not isinstance(
+                details,
+                dict,
+            ):
+                details = {
+                    "previous_details": (
+                        details
+                    ),
+                }
+
+            details.update(
+                {
+                    "journal_entry_id": (
+                        posted_entry.id
+                    ),
+                    "journal_entry_number": (
+                        posted_entry
+                        .entry_number
+                    ),
+                    "posted_adjustment": (
+                        format(
+                            adjustment_amount,
+                            "f",
+                        )
+                    ),
+                    "posting_reason": (
+                        payload.reason
+                    ),
+                    "posted_at": (
+                        posted_entry
+                        .posted_at
+                        .isoformat()
+                        if (
+                            posted_entry
+                            .posted_at
+                        )
+                        else None
+                    ),
+                },
+            )
+
+            calculation.status = (
+                TaxCalculationStatus
+                .CONFIRMED
+                .value
+            )
+
+            calculation.calculation_details_json = (
+                json.dumps(
+                    details,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(
+                        ",",
+                        ":",
+                    ),
+                )
+            )
+
+            database_session.add(
+                calculation,
+            )
+
+        self.commit(
+            database_session,
+            "The tax calculations could not be confirmed after posting.",
+        )
+
+        refreshed_reconciliation = (
+            self.get_reconciliation(
+                database_session,
+                report.id,
+            )
+        )
+
+        return PostTaxAdjustmentResponse(
+            journal_entry=(
+                JournalEntryResponse
+                .model_validate(
+                    posted_entry,
+                )
+            ),
+            reconciliation=(
+                refreshed_reconciliation
+            ),
         )

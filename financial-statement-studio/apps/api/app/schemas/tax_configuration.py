@@ -10,6 +10,9 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from app.schemas.journal_entry import (
+    JournalEntryResponse,
+)
 
 
 class TaxCalculationMethod(StrEnum):
@@ -658,3 +661,83 @@ class TaxCalculationListResponse(
     financial_report_id: str
     items: list[TaxCalculationResponse]
     total: int
+
+class TaxReconciliationStatus(StrEnum):
+    """Relationship between configured tax and ledger taxation."""
+
+    NOT_CONFIGURED = "not_configured"
+    RECONCILED = "reconciled"
+    UNDER_POSTED = "under_posted"
+    OVER_POSTED = "over_posted"
+
+
+class PostTaxAdjustmentRequest(BaseModel):
+    """
+    Details required to post the outstanding calculated tax.
+
+    The user explicitly selects the expense and liability accounts so
+    that the system never silently posts to an unintended account.
+    """
+
+    tax_expense_account_id: str = Field(
+        min_length=36,
+        max_length=36,
+    )
+
+    tax_payable_account_id: str = Field(
+        min_length=36,
+        max_length=36,
+    )
+
+    entry_date: date | None = None
+
+    reason: str = Field(
+        min_length=3,
+        max_length=2000,
+    )
+
+    acknowledge_existing_taxation: bool = False
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+
+class TaxReconciliationResponse(BaseModel):
+    """Comparison between tax calculations and posted taxation."""
+
+    financial_report_id: str
+    currency: str
+    as_of: date
+
+    profit_before_tax: Decimal
+
+    ledger_taxation: Decimal
+    configured_taxation: Decimal
+
+    confirmed_configured_taxation: Decimal
+    draft_configured_taxation: Decimal
+
+    difference: Decimal
+
+    ledger_profit_after_tax: Decimal
+    configured_profit_after_tax: Decimal
+
+    status: TaxReconciliationStatus
+    requires_attention: bool
+
+    calculations: list[
+        TaxCalculationResponse
+    ]
+
+    generated_at: datetime
+
+
+class PostTaxAdjustmentResponse(BaseModel):
+    """Journal and reconciliation returned after controlled posting."""
+
+    journal_entry: JournalEntryResponse
+
+    reconciliation: (
+        TaxReconciliationResponse
+    )
