@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.financial_report import FinancialReport
     from app.models.journal_entry import JournalEntry
     from app.models.ledger_account import LedgerAccount
+    from app.models.tax_profile import TaxProfile
 
 
 class Company(
@@ -112,6 +113,12 @@ class Company(
 
     ledger_accounts: Mapped[list[LedgerAccount]] = relationship(
     "LedgerAccount",
+    back_populates="company",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+    tax_profiles: Mapped[list[TaxProfile]] = relationship(
+    "TaxProfile",
     back_populates="company",
     cascade="all, delete-orphan",
     passive_deletes=True,

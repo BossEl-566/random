@@ -20,6 +20,11 @@ from app.models.journal_line import (
 from app.models.ledger_account import (
     LedgerAccount,
 )
+from app.models.tax_calculation import (
+    TaxCalculation,
+)
+from app.models.tax_profile import TaxProfile
+from app.models.tax_rule import TaxRule
 
 
 __all__ = [
@@ -31,4 +36,7 @@ __all__ = [
     "JournalEntry",
     "JournalLine",
     "LedgerAccount",
+    "TaxCalculation",
+    "TaxProfile",
+    "TaxRule",
 ]

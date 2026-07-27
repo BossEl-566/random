@@ -36,6 +36,9 @@ if TYPE_CHECKING:
     from app.models.journal_entry import (
         JournalEntry,
     )
+    from app.models.tax_calculation import (
+    TaxCalculation,
+)
 
 
 class FinancialReport(
@@ -215,6 +218,16 @@ class FinancialReport(
             "FinancialReportVersion.revision_number"
         ),
     )
+
+    tax_calculations: Mapped[
+    list[TaxCalculation]
+] = relationship(
+    "TaxCalculation",
+    back_populates="financial_report",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+    order_by="TaxCalculation.calculation_date",
+)
 
     comparison_report: Mapped[
         FinancialReport | None
