@@ -500,12 +500,32 @@ export function FinancialReportOverview({
         </strong>
       </Link>
     ) : null}
+        <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/tax`}
+    >
+      <span>09</span>
+
+      <h3>
+        Tax Configuration
+      </h3>
+
+      <p>
+        Manage taxpayer profiles,
+        effective tax rules, calculations
+        and ledger reconciliation.
+      </p>
+
+      <strong>
+        Manage taxation →
+      </strong>
+    </Link>
 
     <Link
   className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
   href={`/reports/${report.id}/finalisation`}
 >
-  <span>09</span>
+  <span>10</span>
 
   <h3>
     Finalisation and Versions

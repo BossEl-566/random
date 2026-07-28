@@ -1,0 +1,4286 @@
+===== FINANCIAL REPORT OVERVIEW =====
+"use client";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  listCompanies,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import type {
+  Company,
+} from "@/types/company";
+import {
+  REPORT_STATUS_OPTIONS,
+  REPORT_TYPE_OPTIONS,
+  type FinancialReport,
+} from "@/types/financial-report";
+import { ReportLockBanner } from "@/components/report-finalisation/report-lock-banner";
+
+type FinancialReportOverviewProps = {
+  reportId: string;
+};
+
+type OverviewState =
+  | {
+      status: "loading";
+      report: null;
+      company: null;
+      message: null;
+    }
+  | {
+      status: "ready";
+      report: FinancialReport;
+      company: Company | null;
+      message: null;
+    }
+  | {
+      status: "error";
+      report: null;
+      company: null;
+      message: string;
+    };
+
+const initialState: OverviewState = {
+  status: "loading",
+  report: null,
+  company: null,
+  message: null,
+};
+
+function getLabel(
+  options: ReadonlyArray<{
+    value: string;
+    label: string;
+  }>,
+  value: string,
+): string {
+  return (
+    options.find(
+      (option) =>
+        option.value === value,
+    )?.label ?? value
+  );
+}
+
+function formatDate(
+  value: string,
+): string {
+  const date = new Date(
+    `${value}T00:00:00`,
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GH",
+    {
+      dateStyle: "long",
+    },
+  ).format(date);
+}
+
+export function FinancialReportOverview({
+  reportId,
+}: FinancialReportOverviewProps) {
+  const [state, setState] =
+    useState<OverviewState>(
+      initialState,
+    );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      getFinancialReport(reportId),
+      listCompanies({
+        includeInactive: true,
+        offset: 0,
+        limit: 100,
+      }),
+    ])
+      .then(
+        ([
+          report,
+          companyResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          const company =
+            companyResponse.items.find(
+              (candidate) =>
+                candidate.id ===
+                report.company_id,
+            ) ?? null;
+
+          setState({
+            status: "ready",
+            report,
+            company,
+            message: null,
+          });
+        },
+      )
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setState({
+          status: "error",
+          report: null,
+          company: null,
+          message:
+            error instanceof Error
+              ? error.message
+              : "The financial report could not be loaded.",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reportId]);
+
+  if (state.status === "loading") {
+    return (
+      <main className="report-overview-page">
+        <div className="report-overview-loading">
+          Loading financial report...
+        </div>
+      </main>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <main className="report-overview-page">
+        <div className="report-state-card report-state-card--error">
+          <span>
+            Report unavailable
+          </span>
+
+          <h2>
+            The financial report could not
+            be opened
+          </h2>
+
+          <p>{state.message}</p>
+
+          <Link
+            className="primary-button"
+            href="/reports"
+          >
+            Return to reports
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const {
+    report,
+    company,
+  } = state;
+
+  return (
+    <main className="report-overview-page">
+      <header className="app-topbar">
+        <Link
+          className="app-brand"
+          href="/reports"
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Report workspace
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+  {company ? (
+    <Link
+      className="topbar-link"
+      href={`/companies/${company.id}/chart-of-accounts`}
+    >
+      Chart of accounts
+    </Link>
+  ) : null}
+
+  <Link
+    className="topbar-link"
+    href="/reports"
+  >
+    All reports
+  </Link>
+
+  <Link
+    className="topbar-link"
+    href="/companies"
+  >
+    Companies
+  </Link>
+</div>
+      </header>
+
+      <section className="report-overview-hero">
+        <div>
+          <p className="eyebrow">
+            {company?.name ??
+              "Financial report"}
+          </p>
+
+          <h1>{report.title}</h1>
+
+          <p>
+            {formatDate(
+              report.period_start,
+            )}
+            {" to "}
+            {formatDate(
+              report.period_end,
+            )}
+          </p>
+        </div>
+
+        <div className="report-overview-hero__status">
+          <span>Status</span>
+
+          <strong>
+            {getLabel(
+              REPORT_STATUS_OPTIONS,
+              report.status,
+            )}
+          </strong>
+        </div>
+      </section>
+
+      <section className="report-overview-summary">
+        <div>
+          <span>Report type</span>
+          <strong>
+            {getLabel(
+              REPORT_TYPE_OPTIONS,
+              report.report_type,
+            )}
+          </strong>
+        </div>
+
+        <div>
+          <span>Financial year</span>
+          <strong>
+            {report.financial_year}
+          </strong>
+        </div>
+
+        <div>
+          <span>Currency</span>
+          <strong>
+            {report.currency}
+          </strong>
+        </div>
+
+        <div>
+          <span>Business template</span>
+          <strong>
+            {report.business_template}
+          </strong>
+        </div>
+      </section>
+
+     <section className="report-accounting-launchpad">
+  <div className="report-accounting-launchpad__heading">
+    <div>
+      <p className="eyebrow">
+        Accounting workspace
+      </p>
+
+      <h2>
+        Continue preparing this report
+      </h2>
+
+      <p>
+        Record transactions, verify balances
+        and review automatically calculated
+        financial statements.
+      </p>
+    </div>
+  </div>
+    {[
+  "finalised",
+  "printed",
+  "archived",
+].includes(report.status) ? (
+  <ReportLockBanner
+    reportId={report.id}
+    status={report.status}
+  />
+) : null}
+  <div className="report-accounting-launchpad__grid">
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/journal`}
+    >
+      <span>01</span>
+
+      <h3>
+        General Journal
+      </h3>
+
+      <p>
+        Record opening balances, standard
+        transactions and adjustments using
+        equal debit and credit lines.
+      </p>
+
+      <strong>
+        Open journal →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/trial-balance`}
+    >
+      <span>02</span>
+
+      <h3>
+        Trial Balance
+      </h3>
+
+      <p>
+        Review posted account balances and
+        confirm that total debits equal total
+        credits.
+      </p>
+
+      <strong>
+        View Trial Balance →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/profit-or-loss`}
+    >
+      <span>03</span>
+
+      <h3>
+        Profit or Loss
+      </h3>
+
+      <p>
+        Review revenue, direct costs,
+        operating expenses, taxation and
+        profit for the reporting period.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/financial-position`}
+    >
+      <span>04</span>
+
+      <h3>
+        Financial Position
+      </h3>
+
+      <p>
+        Review assets, liabilities, equity
+        and the accounting-equation balance.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--equity"
+  href={`/reports/${report.id}/statements/changes-in-equity`}
+>
+  <span>05</span>
+
+  <h3>
+    Changes in Equity
+  </h3>
+
+  <p>
+    Review opening equity, owner
+    contributions, drawings, profit and
+    total closing equity.
+  </p>
+
+  <strong>
+    View statement →
+  </strong>
+</Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement report-launch-card--cash-flow"
+      href={`/reports/${report.id}/statements/cash-flows`}
+    >
+      <span>06</span>
+
+      <h3>
+        Cash Flows
+      </h3>
+
+      <p>
+        Review operating, investing and
+        financing cash flows using the
+        indirect method.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--notes"
+  href={`/reports/${report.id}/notes`}
+>
+  <span>07</span>
+
+  <h3>
+    Notes and Disclosures
+  </h3>
+
+  <p>
+    Prepare accounting policies,
+    explanatory notes and supporting
+    statement disclosures.
+  </p>
+
+  <strong>
+    Manage notes →
+  </strong>
+</Link>
+
+    {company ? (
+      <Link
+        className="report-launch-card"
+        href={`/companies/${company.id}/chart-of-accounts`}
+      >
+        <span>08</span>
+
+        <h3>
+          Chart of Accounts
+        </h3>
+
+        <p>
+          Add, classify, group and manage
+          the ledger accounts available to
+          this report.
+        </p>
+
+        <strong>
+          Manage accounts →
+        </strong>
+      </Link>
+    ) : null}
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
+  href={`/reports/${report.id}/finalisation`}
+>
+  <span>09</span>
+
+  <h3>
+    Finalisation and Versions
+  </h3>
+
+  <p>
+    Check readiness, approve the report,
+    verify immutable snapshots and create
+    controlled revisions.
+  </p>
+
+  <strong>
+    Review finalisation →
+  </strong>
+</Link>
+  </div>
+</section>
+    </main>
+  );
+}
+===== FINALISATION WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  useRouter,
+} from "next/navigation";
+
+import { CreateRevisionDialog } from "@/components/report-finalisation/create-revision-dialog";
+import { FinaliseReportDialog } from "@/components/report-finalisation/finalise-report-dialog";
+import { VersionDetailDialog } from "@/components/report-finalisation/version-detail-dialog";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import {
+  createFinancialReportRevision,
+  finaliseFinancialReport,
+  getFinancialReportVersion,
+  getReportFinalisationReadiness,
+  listFinancialReportVersions,
+} from "@/lib/report-finalisation-api";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  CreateFinancialReportRevisionPayload,
+  FinalisationFinancialReport,
+  FinaliseFinancialReportPayload,
+  FinancialReportVersionDetail,
+  FinancialReportVersionSummary,
+  ReportFinalisationReadiness,
+} from "@/types/report-finalisation";
+
+type ReportFinalisationWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+type StatusMessage = {
+  type:
+    | "success"
+    | "error"
+    | "info";
+  text: string;
+} | null;
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+function formatDateTime(
+  value: string | null,
+): string {
+  if (!value) {
+    return "Not finalised";
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  ).format(
+    new Date(value),
+  );
+}
+
+function formatStatus(
+  value: string,
+): string {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) =>
+      letter.toUpperCase(),
+    );
+}
+
+export function ReportFinalisationWorkspace({
+  reportId,
+}: ReportFinalisationWorkspaceProps) {
+  const router = useRouter();
+
+  const [
+    report,
+    setReport,
+  ] =
+    useState<FinalisationFinancialReport | null>(
+      null,
+    );
+
+  const [
+    company,
+    setCompany,
+  ] =
+    useState<Company | null>(
+      null,
+    );
+
+  const [
+    readiness,
+    setReadiness,
+  ] =
+    useState<ReportFinalisationReadiness | null>(
+      null,
+    );
+
+  const [
+    versions,
+    setVersions,
+  ] =
+    useState<
+      FinancialReportVersionSummary[]
+    >([]);
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    statusMessage,
+    setStatusMessage,
+  ] = useState<StatusMessage>(
+    null,
+  );
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  const [
+    showFinaliseDialog,
+    setShowFinaliseDialog,
+  ] = useState(false);
+
+  const [
+    showRevisionDialog,
+    setShowRevisionDialog,
+  ] = useState(false);
+
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState(false);
+
+  const [
+    selectedVersion,
+    setSelectedVersion,
+  ] =
+    useState<FinancialReportVersionDetail | null>(
+      null,
+    );
+
+  const [
+    loadingVersionId,
+    setLoadingVersionId,
+  ] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getFinancialReport(reportId)
+      .then(
+        async (
+          reportResponse,
+        ) => {
+          const typedReport =
+            reportResponse as FinalisationFinancialReport;
+
+          const [
+            companyResponse,
+            readinessResponse,
+            versionResponse,
+          ] = await Promise.all([
+            getCompany(
+              typedReport.company_id,
+            ),
+
+            getReportFinalisationReadiness(
+              reportId,
+            ),
+
+            listFinancialReportVersions(
+              reportId,
+            ),
+          ]);
+
+          return {
+            typedReport,
+            companyResponse,
+            readinessResponse,
+            versionResponse,
+          };
+        },
+      )
+      .then(
+        ({
+          typedReport,
+          companyResponse,
+          readinessResponse,
+          versionResponse,
+        }) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            typedReport,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setReadiness(
+            readinessResponse,
+          );
+
+          setVersions(
+            versionResponse.items,
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The finalisation workspace could not be loaded.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    reloadVersion,
+    reportId,
+  ]);
+
+  const orderedVersions =
+    useMemo(
+      () =>
+        [...versions].sort(
+          (
+            firstVersion,
+            secondVersion,
+          ) =>
+            secondVersion
+              .revision_number -
+            firstVersion
+              .revision_number,
+        ),
+      [versions],
+    );
+
+  const reportIsLocked =
+    report
+      ? [
+          "finalised",
+          "printed",
+          "archived",
+        ].includes(
+          report.status,
+        )
+      : false;
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  async function handleFinalise(
+    payload: FinaliseFinancialReportPayload,
+  ): Promise<void> {
+    setIsSubmitting(true);
+    setStatusMessage(null);
+
+    try {
+      const response =
+        await finaliseFinancialReport(
+          reportId,
+          payload,
+        );
+
+      setShowFinaliseDialog(false);
+
+      setStatusMessage({
+        type: "success",
+        text:
+          `Revision ${response.revision_number} was finalised and locked successfully.`,
+      });
+
+      requestReload();
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The financial report could not be finalised.",
+        ),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleCreateRevision(
+    payload:
+      CreateFinancialReportRevisionPayload,
+  ): Promise<void> {
+    setIsSubmitting(true);
+    setStatusMessage(null);
+
+    try {
+      const revisedReport =
+        await createFinancialReportRevision(
+          reportId,
+          payload,
+        );
+
+      setShowRevisionDialog(false);
+
+      router.push(
+        `/reports/${revisedReport.id}`,
+      );
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The draft revision could not be created.",
+        ),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function openVersion(
+    versionId: string,
+  ): Promise<void> {
+    setLoadingVersionId(
+      versionId,
+    );
+
+    setStatusMessage(null);
+
+    try {
+      const version =
+        await getFinancialReportVersion(
+          versionId,
+        );
+
+      setSelectedVersion(
+        version,
+      );
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        text: getErrorMessage(
+          error,
+          "The stored report version could not be opened.",
+        ),
+      });
+    } finally {
+      setLoadingVersionId(null);
+    }
+  }
+
+  return (
+    <main className="finalisation-page">
+      <header className="app-topbar">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Report Finalisation
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/trial-balance`}
+          >
+            Trial Balance
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/notes`}
+          >
+            Notes
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+        </div>
+      </header>
+
+      <section className="finalisation-hero">
+        <div>
+          <p className="eyebrow">
+            Approval and version control
+          </p>
+
+          <h1>
+            Finalisation and Revisions
+          </h1>
+
+          <p>
+            Verify report readiness, create an
+            immutable approved version and manage
+            controlled corrections without changing
+            previously finalised statements.
+          </p>
+        </div>
+
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={
+            resourceState ===
+            "loading"
+          }
+          onClick={requestReload}
+        >
+          Refresh checks
+        </button>
+      </section>
+
+      <section className="finalisation-content">
+        {resourceState ===
+        "loading" ? (
+          <div className="financial-statement-loading">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState ===
+        "error" ? (
+          <div className="journal-state-card journal-state-card--error">
+            <span>
+              Finalisation unavailable
+            </span>
+
+            <h2>
+              Finalisation information could not
+              be loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={requestReload}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState ===
+          "ready" &&
+        report &&
+        readiness ? (
+          <>
+            {statusMessage ? (
+              <div
+                className={`notes-status notes-status--${statusMessage.type}`}
+                role={
+                  statusMessage.type ===
+                  "error"
+                    ? "alert"
+                    : "status"
+                }
+              >
+                {statusMessage.text}
+              </div>
+            ) : null}
+
+            <section
+              className={
+                reportIsLocked
+                  ? "finalisation-lock-panel finalisation-lock-panel--locked"
+                  : "finalisation-lock-panel"
+              }
+            >
+              <div>
+                <span>
+                  Current report status
+                </span>
+
+                <h2>
+                  {formatStatus(
+                    report.status,
+                  )}
+                </h2>
+
+                <p>
+                  Revision{" "}
+                  {report.revision_number}
+                  {reportIsLocked
+                    ? " is immutable. Changes require a controlled revision."
+                    : " remains editable until formal finalisation."}
+                </p>
+              </div>
+
+              <div className="finalisation-lock-panel__metadata">
+                <span>
+                  Finalised
+                </span>
+
+                <strong>
+                  {formatDateTime(
+                    report.finalised_at,
+                  )}
+                </strong>
+
+                {report.finalised_by ? (
+                  <small>
+                    Approved by{" "}
+                    {report.finalised_by}
+                  </small>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="finalisation-readiness-panel">
+              <header>
+                <div>
+                  <span>
+                    Readiness assessment
+                  </span>
+
+                  <h2>
+                    {readiness.can_finalise
+                      ? "Report is ready for finalisation"
+                      : reportIsLocked
+                        ? "Report is already locked"
+                        : "Action is required before finalisation"}
+                  </h2>
+                </div>
+
+                <strong
+                  className={
+                    readiness.can_finalise
+                      ? "readiness-badge readiness-badge--ready"
+                      : "readiness-badge readiness-badge--blocked"
+                  }
+                >
+                  {readiness.can_finalise
+                    ? "Ready"
+                    : "Not ready"}
+                </strong>
+              </header>
+
+              <div className="finalisation-metrics">
+                <article>
+                  <span>
+                    Posted entries
+                  </span>
+
+                  <strong>
+                    {
+                      readiness.posted_entry_count
+                    }
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Draft entries
+                  </span>
+
+                  <strong>
+                    {
+                      readiness.draft_entry_count
+                    }
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Active notes
+                  </span>
+
+                  <strong>
+                    {
+                      readiness.active_note_count
+                    }
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Trial Balance
+                  </span>
+
+                  <strong>
+                    {readiness.trial_balance_is_balanced
+                      ? "Balanced"
+                      : "Unbalanced"}
+                  </strong>
+                </article>
+              </div>
+
+              {readiness.blockers.length >
+              0 ? (
+                <section className="finalisation-check-list finalisation-check-list--blockers">
+                  <header>
+                    <h3>
+                      Blocking issues
+                    </h3>
+                  </header>
+
+                  {readiness.blockers.map(
+                    (blocker) => (
+                      <article
+                        key={blocker.code}
+                      >
+                        <span>!</span>
+
+                        <div>
+                          <strong>
+                            {blocker.title}
+                          </strong>
+
+                          <p>
+                            {blocker.detail}
+                          </p>
+                        </div>
+                      </article>
+                    ),
+                  )}
+                </section>
+              ) : null}
+
+              {readiness.warnings.length >
+              0 ? (
+                <section className="finalisation-check-list finalisation-check-list--warnings">
+                  <header>
+                    <h3>
+                      Review warnings
+                    </h3>
+                  </header>
+
+                  {readiness.warnings.map(
+                    (warning) => (
+                      <article
+                        key={warning.code}
+                      >
+                        <span>i</span>
+
+                        <div>
+                          <strong>
+                            {warning.title}
+                          </strong>
+
+                          <p>
+                            {warning.detail}
+                          </p>
+                        </div>
+                      </article>
+                    ),
+                  )}
+                </section>
+              ) : null}
+
+              {!reportIsLocked ? (
+                <footer>
+                  <p>
+                    Warnings do not prevent
+                    finalisation. Blocking issues
+                    must be resolved first.
+                  </p>
+
+                  <button
+                    className="finalisation-danger-button"
+                    type="button"
+                    disabled={
+                      !readiness.can_finalise
+                    }
+                    onClick={() =>
+                      setShowFinaliseDialog(
+                        true,
+                      )
+                    }
+                  >
+                    Finalise report
+                  </button>
+                </footer>
+              ) : null}
+            </section>
+
+            <section className="version-history-panel">
+              <header>
+                <div>
+                  <span>
+                    Immutable audit history
+                  </span>
+
+                  <h2>
+                    Finalised Versions
+                  </h2>
+
+                  <p>
+                    Each finalised revision is retained
+                    with its approval details, complete
+                    data snapshot and checksum.
+                  </p>
+                </div>
+
+                <strong>
+                  {orderedVersions.length}
+                  {" "}
+                  version
+                  {orderedVersions.length === 1
+                    ? ""
+                    : "s"}
+                </strong>
+              </header>
+
+              <div className="version-history-list">
+                {orderedVersions.length >
+                0 ? (
+                  orderedVersions.map(
+                    (version) => (
+                      <article
+                        key={version.id}
+                      >
+                        <div className="version-history-number">
+                          <span>
+                            Revision
+                          </span>
+
+                          <strong>
+                            {
+                              version.revision_number
+                            }
+                          </strong>
+                        </div>
+
+                        <div className="version-history-details">
+                          <strong>
+                            Finalised{" "}
+                            {formatDateTime(
+                              version.finalised_at,
+                            )}
+                          </strong>
+
+                          <span>
+                            Prepared by{" "}
+                            {
+                              version.accountant_name
+                            }
+                            {" · "}
+                            Approved by{" "}
+                            {
+                              version.finalised_by
+                            }
+                          </span>
+
+                          <code>
+                            {
+                              version.snapshot_checksum
+                            }
+                          </code>
+                        </div>
+
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={
+                            loadingVersionId ===
+                            version.id
+                          }
+                          onClick={() => {
+                            void openVersion(
+                              version.id,
+                            );
+                          }}
+                        >
+                          {loadingVersionId ===
+                          version.id
+                            ? "Opening..."
+                            : "View snapshot"}
+                        </button>
+                      </article>
+                    ),
+                  )
+                ) : (
+                  <div className="version-history-empty">
+                    <span>
+                      No immutable version yet
+                    </span>
+
+                    <p>
+                      A version will be created when
+                      the report is formally finalised.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {report.status ===
+            "finalised" ? (
+              <section className="create-revision-panel">
+                <div>
+                  <span>
+                    Controlled corrections
+                  </span>
+
+                  <h2>
+                    Create a New Draft Revision
+                  </h2>
+
+                  <p>
+                    The finalised report remains
+                    unchanged. Its journals and notes
+                    will be copied into a new editable
+                    revision.
+                  </p>
+                </div>
+
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() =>
+                    setShowRevisionDialog(
+                      true,
+                    )
+                  }
+                >
+                  Create revision{" "}
+                  {report.revision_number +
+                    1}
+                </button>
+              </section>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+
+      {showFinaliseDialog ? (
+        <FinaliseReportDialog
+          isSubmitting={isSubmitting}
+          onCancel={() =>
+            setShowFinaliseDialog(
+              false,
+            )
+          }
+          onConfirm={handleFinalise}
+        />
+      ) : null}
+
+      {showRevisionDialog &&
+      report ? (
+        <CreateRevisionDialog
+          currentTitle={report.title}
+          currentRevisionNumber={
+            report.revision_number
+          }
+          isSubmitting={isSubmitting}
+          onCancel={() =>
+            setShowRevisionDialog(
+              false,
+            )
+          }
+          onConfirm={
+            handleCreateRevision
+          }
+        />
+      ) : null}
+
+      {selectedVersion ? (
+        <VersionDetailDialog
+          key={selectedVersion.id}
+          version={selectedVersion}
+          onClose={() =>
+            setSelectedVersion(null)
+          }
+        />
+      ) : null}
+    </main>
+  );
+}
+===== CHART OF ACCOUNTS WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { LedgerAccountEditor } from "@/components/chart-of-accounts/ledger-account-editor";
+import { LedgerAccountRow } from "@/components/chart-of-accounts/ledger-account-row";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  deactivateLedgerAccount,
+  initializeChartOfAccounts,
+  listLedgerAccounts,
+} from "@/lib/ledger-accounts-api";
+import type {
+  Company,
+} from "@/types/company";
+import {
+  ACCOUNT_TYPE_OPTIONS,
+  REPORT_CATEGORY_OPTIONS,
+  type AccountType,
+  type ChartInitializationResponse,
+  type LedgerAccount,
+  type ReportCategory,
+} from "@/types/ledger-account";
+
+type ChartOfAccountsWorkspaceProps = {
+  companyId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+type EditorState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      account: LedgerAccount;
+    }
+  | null;
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function ChartOfAccountsWorkspace({
+  companyId,
+}: ChartOfAccountsWorkspaceProps) {
+  const [company, setCompany] =
+    useState<Company | null>(null);
+
+  const [accounts, setAccounts] =
+    useState<LedgerAccount[]>([]);
+
+  const [total, setTotal] =
+    useState(0);
+
+  const [resourceState, setResourceState] =
+    useState<ResourceState>("loading");
+
+  const [loadError, setLoadError] =
+    useState<string | null>(null);
+
+  const [actionError, setActionError] =
+    useState<string | null>(null);
+
+  const [
+    initializationMessage,
+    setInitializationMessage,
+  ] = useState<string | null>(null);
+
+  const [searchInput, setSearchInput] =
+    useState("");
+
+  const [appliedSearch, setAppliedSearch] =
+    useState("");
+
+  const [
+    selectedAccountType,
+    setSelectedAccountType,
+  ] = useState<AccountType | "">("");
+
+  const [
+    selectedReportCategory,
+    setSelectedReportCategory,
+  ] = useState<
+    ReportCategory | ""
+  >("");
+
+  const [
+    includeInactive,
+    setIncludeInactive,
+  ] = useState(false);
+
+  const [reloadVersion, setReloadVersion] =
+    useState(0);
+
+  const [editorState, setEditorState] =
+    useState<EditorState>(null);
+
+  const [
+    isInitializing,
+    setIsInitializing,
+  ] = useState(false);
+
+  const [
+    deactivatingAccountId,
+    setDeactivatingAccountId,
+  ] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      getCompany(companyId),
+      listLedgerAccounts(
+        companyId,
+        {
+          search:
+            appliedSearch || undefined,
+          accountType:
+            selectedAccountType ||
+            undefined,
+          reportCategory:
+            selectedReportCategory ||
+            undefined,
+          includeInactive,
+          offset: 0,
+          limit: 500,
+        },
+      ),
+    ])
+      .then(
+        ([
+          companyResponse,
+          accountResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setCompany(
+            companyResponse,
+          );
+
+          setAccounts(
+            accountResponse.items,
+          );
+
+          setTotal(
+            accountResponse.total,
+          );
+
+          setResourceState("ready");
+        },
+      )
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setResourceState("error");
+
+        setLoadError(
+          getErrorMessage(
+            error,
+            "The Chart of Accounts could not be loaded.",
+          ),
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedSearch,
+    companyId,
+    includeInactive,
+    reloadVersion,
+    selectedAccountType,
+    selectedReportCategory,
+  ]);
+
+  const parentNames =
+    useMemo(() => {
+      return new Map(
+        accounts.map((account) => [
+          account.id,
+          account.account_name,
+        ]),
+      );
+    }, [accounts]);
+
+  const accountGroups =
+    useMemo(() => {
+      return ACCOUNT_TYPE_OPTIONS
+        .map((accountType) => ({
+          ...accountType,
+          accounts: accounts.filter(
+            (account) =>
+              account.account_type ===
+              accountType.value,
+          ),
+        }))
+        .filter(
+          (group) =>
+            group.accounts.length > 0,
+        );
+    }, [accounts]);
+
+  function requestReload(): void {
+    setResourceState("loading");
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    const nextSearch =
+      searchInput.trim();
+
+    setResourceState("loading");
+    setLoadError(null);
+
+    if (nextSearch === appliedSearch) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+
+      return;
+    }
+
+    setAppliedSearch(nextSearch);
+  }
+
+  function handleAccountTypeFilter(
+    accountType: AccountType | "",
+  ): void {
+    setResourceState("loading");
+    setLoadError(null);
+    setSelectedAccountType(accountType);
+  }
+
+  function handleReportCategoryFilter(
+    reportCategory:
+      | ReportCategory
+      | "",
+  ): void {
+    setResourceState("loading");
+    setLoadError(null);
+    setSelectedReportCategory(
+      reportCategory,
+    );
+  }
+
+  function handleIncludeInactive(
+    nextIncludeInactive: boolean,
+  ): void {
+    setResourceState("loading");
+    setLoadError(null);
+    setIncludeInactive(
+      nextIncludeInactive,
+    );
+  }
+
+  function clearFilters(): void {
+    setSearchInput("");
+    setAppliedSearch("");
+    setSelectedAccountType("");
+    setSelectedReportCategory("");
+    setIncludeInactive(false);
+    setResourceState("loading");
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  async function handleInitialize(): Promise<void> {
+    if (!company) {
+      return;
+    }
+
+    setActionError(null);
+    setInitializationMessage(null);
+    setIsInitializing(true);
+
+    try {
+      const response:
+        ChartInitializationResponse =
+        await initializeChartOfAccounts(
+          company.id,
+        );
+
+      const message =
+        response.created_count > 0
+          ? `${response.created_count} default accounts were added. ${response.skipped_count} existing accounts were skipped.`
+          : `No new accounts were required. ${response.skipped_count} default accounts already exist.`;
+
+      setInitializationMessage(
+        message,
+      );
+
+      requestReload();
+    } catch (error) {
+      setActionError(
+        getErrorMessage(
+          error,
+          "The default Chart of Accounts could not be initialized.",
+        ),
+      );
+    } finally {
+      setIsInitializing(false);
+    }
+  }
+
+  function handleAccountSaved(): void {
+    setEditorState(null);
+    setActionError(null);
+    requestReload();
+  }
+
+  async function handleDeactivate(
+    account: LedgerAccount,
+  ): Promise<void> {
+    const confirmed = window.confirm(
+      [
+        `Deactivate ${account.account_code} — ${account.account_name}?`,
+        "",
+        "The account will be hidden from the active Chart of Accounts but will remain stored for historical accounting records.",
+      ].join("\n"),
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActionError(null);
+    setDeactivatingAccountId(
+      account.id,
+    );
+
+    try {
+      await deactivateLedgerAccount(
+        account.id,
+      );
+
+      requestReload();
+    } catch (error) {
+      setActionError(
+        getErrorMessage(
+          error,
+          "The ledger account could not be deactivated.",
+        ),
+      );
+    } finally {
+      setDeactivatingAccountId(null);
+    }
+  }
+
+  const filtersApplied =
+    Boolean(
+      appliedSearch ||
+      selectedAccountType ||
+      selectedReportCategory ||
+      includeInactive,
+    );
+
+  return (
+    <main className="ledger-page">
+      <header className="app-topbar">
+        <Link
+          className="app-brand"
+          href="/companies"
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Chart of Accounts
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports?company_id=${companyId}`}
+          >
+            Financial reports
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href="/companies"
+          >
+            Companies
+          </Link>
+        </div>
+      </header>
+
+      <section className="ledger-hero">
+        <div>
+          <p className="eyebrow">
+            Chart of Accounts
+          </p>
+
+          <h1>
+            {company?.name ??
+              "Company accounts"}
+          </h1>
+
+          <p>
+            The Chart of Accounts defines
+            every financial category the
+            business can use. Each account is
+            mapped to the correct financial
+            statement section.
+          </p>
+        </div>
+
+        <div className="ledger-hero__summary">
+          <span>
+            Available accounts
+          </span>
+
+          <strong>
+            {resourceState === "ready"
+              ? total
+              : "—"}
+          </strong>
+
+          <div className="ledger-hero__actions">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={
+                !company ||
+                !company.is_active
+              }
+              onClick={() =>
+                setEditorState({
+                  mode: "create",
+                })
+              }
+            >
+              Add custom account
+            </button>
+
+            <button
+              className="ledger-initialize-button"
+              type="button"
+              disabled={
+                isInitializing ||
+                !company ||
+                !company.is_active
+              }
+              onClick={() => {
+                void handleInitialize();
+              }}
+            >
+              {isInitializing
+                ? "Adding defaults..."
+                : "Add default accounts"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="ledger-toolbar">
+        <form
+          className="ledger-search"
+          onSubmit={handleSearch}
+        >
+          <label htmlFor="ledger-search">
+            Search accounts
+          </label>
+
+          <div className="ledger-search__controls">
+            <input
+              id="ledger-search"
+              type="search"
+              value={searchInput}
+              placeholder="Search by code or account name"
+              onChange={(event) =>
+                setSearchInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button type="submit">
+              Search
+            </button>
+          </div>
+        </form>
+
+        <label className="ledger-filter">
+          <span>Account type</span>
+
+          <select
+            value={selectedAccountType}
+            onChange={(event) =>
+              handleAccountTypeFilter(
+                event.target
+                  .value as
+                  | AccountType
+                  | "",
+              )
+            }
+          >
+            <option value="">
+              All account types
+            </option>
+
+            {ACCOUNT_TYPE_OPTIONS.map(
+              (option) => (
+                <option
+                  value={option.value}
+                  key={option.value}
+                >
+                  {option.label}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+
+        <label className="ledger-filter">
+          <span>
+            Statement category
+          </span>
+
+          <select
+            value={
+              selectedReportCategory
+            }
+            onChange={(event) =>
+              handleReportCategoryFilter(
+                event.target
+                  .value as
+                  | ReportCategory
+                  | "",
+              )
+            }
+          >
+            <option value="">
+              All categories
+            </option>
+
+            {REPORT_CATEGORY_OPTIONS.map(
+              (option) => (
+                <option
+                  value={option.value}
+                  key={option.value}
+                >
+                  {option.label}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+
+        <div className="ledger-toolbar__right">
+          <label className="ledger-inactive-control">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(event) =>
+                handleIncludeInactive(
+                  event.target.checked,
+                )
+              }
+            />
+
+            <span>
+              Show inactive
+            </span>
+          </label>
+
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              resourceState === "loading"
+            }
+            onClick={requestReload}
+          >
+            Refresh
+          </button>
+
+          {filtersApplied ? (
+            <button
+              className="text-button"
+              type="button"
+              onClick={clearFilters}
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      {initializationMessage ? (
+        <div
+          className="workspace-alert ledger-alert--success"
+          role="status"
+        >
+          <div>
+            <strong>
+              Chart updated
+            </strong>
+
+            <p>
+              {initializationMessage}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setInitializationMessage(
+                null,
+              )
+            }
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div
+          className="workspace-alert workspace-alert--error"
+          role="alert"
+        >
+          <div>
+            <strong>
+              Account action failed
+            </strong>
+
+            <p>{actionError}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setActionError(null)
+            }
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      <section
+        className="ledger-content"
+        aria-busy={
+          resourceState === "loading"
+        }
+      >
+        {resourceState === "loading" ? (
+          <div className="ledger-loading-card">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState === "error" ? (
+          <div className="ledger-state-card ledger-state-card--error">
+            <span>
+              Account data unavailable
+            </span>
+
+            <h2>
+              The Chart of Accounts could
+              not be loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={requestReload}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        accounts.length === 0 ? (
+          <div className="ledger-state-card">
+            <span>
+              {filtersApplied
+                ? "No matching accounts"
+                : "Chart not initialized"}
+            </span>
+
+            <h2>
+              {filtersApplied
+                ? "No account matches the selected filters"
+                : "Add the company’s default accounts"}
+            </h2>
+
+            <p>
+              {filtersApplied
+                ? "Change or clear the search and filters to view other accounts."
+                : "The system can create a professional starting Chart of Accounts based on the company’s business type."}
+            </p>
+
+            <div className="ledger-state-card__actions">
+              {filtersApplied ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={clearFilters}
+                >
+                  Clear filters
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={
+                      isInitializing ||
+                      !company?.is_active
+                    }
+                    onClick={() => {
+                      void handleInitialize();
+                    }}
+                  >
+                    Initialize default accounts
+                  </button>
+
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={
+                      !company?.is_active
+                    }
+                    onClick={() =>
+                      setEditorState({
+                        mode: "create",
+                      })
+                    }
+                  >
+                    Add a custom account
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        accounts.length > 0 ? (
+          <div className="ledger-groups">
+            {accountGroups.map(
+              (group) => (
+                <section
+                  className="ledger-group"
+                  key={group.value}
+                >
+                  <header className="ledger-group__header">
+                    <div>
+                      <p className="eyebrow">
+                        Account group
+                      </p>
+
+                      <h2>
+                        {group.label}
+                      </h2>
+                    </div>
+
+                    <span>
+                      {group.accounts.length}
+                      {group.accounts.length === 1
+                        ? " account"
+                        : " accounts"}
+                    </span>
+                  </header>
+
+                  <div className="ledger-table-wrapper">
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Account</th>
+                          <th>
+                            Statement category
+                          </th>
+                          <th>
+                            Normal balance
+                          </th>
+                          <th>
+                            Cash flow
+                          </th>
+                          <th>
+                            Parent account
+                          </th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {group.accounts.map(
+                          (account) => (
+                            <LedgerAccountRow
+                              account={
+                                account
+                              }
+                              parentName={
+                                account.parent_account_id
+                                  ? parentNames.get(
+                                      account.parent_account_id,
+                                    ) ??
+                                    "Parent account"
+                                  : null
+                              }
+                              isDeactivating={
+                                deactivatingAccountId ===
+                                account.id
+                              }
+                              key={
+                                account.id
+                              }
+                              onEdit={(
+                                selectedAccount,
+                              ) =>
+                                setEditorState(
+                                  {
+                                    mode: "edit",
+                                    account:
+                                      selectedAccount,
+                                  },
+                                )
+                              }
+                              onDeactivate={
+                                handleDeactivate
+                              }
+                            />
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ),
+            )}
+          </div>
+        ) : null}
+      </section>
+
+      <footer className="company-page__footer">
+        <span>
+          Financial Statement Studio
+        </span>
+
+        <span>
+          Account classifications feed the
+          general ledger and financial
+          statements.
+        </span>
+      </footer>
+
+      {editorState && company ? (
+        <LedgerAccountEditor
+          key={
+            editorState.mode === "edit"
+              ? editorState.account.id
+              : "new-ledger-account"
+          }
+          company={company}
+          accounts={accounts}
+          account={
+            editorState.mode === "edit"
+              ? editorState.account
+              : null
+          }
+          onClose={() =>
+            setEditorState(null)
+          }
+          onSaved={
+            handleAccountSaved
+          }
+        />
+      ) : null}
+    </main>
+  );
+}
+===== LEDGER ACCOUNT EDITOR =====
+"use client";
+
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import {
+  createLedgerAccount,
+  updateLedgerAccount,
+} from "@/lib/ledger-accounts-api";
+import type {
+  Company,
+} from "@/types/company";
+import {
+  ACCOUNT_TYPE_DEFAULT_NORMAL_BALANCE,
+  ACCOUNT_TYPE_OPTIONS,
+  CASH_FLOW_CATEGORY_OPTIONS,
+  NORMAL_BALANCE_OPTIONS,
+  REPORT_CATEGORY_ACCOUNT_TYPE,
+  REPORT_CATEGORY_OPTIONS,
+  type AccountType,
+  type CashFlowCategory,
+  type LedgerAccount,
+  type LedgerAccountCreatePayload,
+  type NormalBalance,
+  type ReportCategory,
+} from "@/types/ledger-account";
+
+type LedgerAccountEditorProps = {
+  company: Company;
+  accounts: LedgerAccount[];
+  account: LedgerAccount | null;
+  onClose: () => void;
+  onSaved: (
+    account: LedgerAccount,
+  ) => Promise<void> | void;
+};
+
+type LedgerAccountFormValues = {
+  accountCode: string;
+  accountName: string;
+  accountType: AccountType;
+  reportCategory: ReportCategory;
+  cashFlowCategory:
+    | CashFlowCategory
+    | "";
+  normalBalance: NormalBalance;
+  parentAccountId: string;
+  description: string;
+  displayOrder: string;
+};
+
+function getInitialValues(
+  account: LedgerAccount | null,
+): LedgerAccountFormValues {
+  if (account) {
+    return {
+      accountCode:
+        account.account_code,
+      accountName:
+        account.account_name,
+      accountType:
+        account.account_type,
+      reportCategory:
+        account.report_category,
+      cashFlowCategory:
+        account.cash_flow_category ??
+        "",
+      normalBalance:
+        account.normal_balance,
+      parentAccountId:
+        account.parent_account_id ??
+        "",
+      description:
+        account.description ?? "",
+      displayOrder: String(
+        account.display_order,
+      ),
+    };
+  }
+
+  return {
+    accountCode: "",
+    accountName: "",
+    accountType: "expense",
+    reportCategory:
+      "administrative_expenses",
+    cashFlowCategory:
+      "operating",
+    normalBalance: "debit",
+    parentAccountId: "",
+    description: "",
+    displayOrder: "0",
+  };
+}
+
+function nullableText(
+  value: string,
+): string | null {
+  const cleanedValue = value.trim();
+
+  return cleanedValue || null;
+}
+
+export function LedgerAccountEditor({
+  company,
+  accounts,
+  account,
+  onClose,
+  onSaved,
+}: LedgerAccountEditorProps) {
+  const [values, setValues] =
+    useState<LedgerAccountFormValues>(
+      () => getInitialValues(account),
+    );
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+
+  const [formError, setFormError] =
+    useState<string | null>(null);
+
+  const isEditing = account !== null;
+
+  const isProtectedSystemAccount =
+    account?.is_system_account === true;
+
+  const parentOptions =
+    useMemo(() => {
+      return accounts.filter(
+        (candidate) =>
+          candidate.id !== account?.id &&
+          candidate.is_active,
+      );
+    }, [
+      account?.id,
+      accounts,
+    ]);
+
+  useEffect(() => {
+    function handleKeyDown(
+      event: KeyboardEvent,
+    ): void {
+      if (
+        event.key === "Escape" &&
+        !isSubmitting
+      ) {
+        onClose();
+      }
+    }
+
+    window.addEventListener(
+      "keydown",
+      handleKeyDown,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleKeyDown,
+      );
+    };
+  }, [
+    isSubmitting,
+    onClose,
+  ]);
+
+  function setField<
+    FieldName extends keyof LedgerAccountFormValues,
+  >(
+    fieldName: FieldName,
+    value: LedgerAccountFormValues[FieldName],
+  ): void {
+    setValues((currentValues) => ({
+      ...currentValues,
+      [fieldName]: value,
+    }));
+  }
+
+  function handleReportCategoryChange(
+    reportCategory: ReportCategory,
+  ): void {
+    const accountType =
+      REPORT_CATEGORY_ACCOUNT_TYPE[
+        reportCategory
+      ];
+
+    setValues((currentValues) => ({
+      ...currentValues,
+      reportCategory,
+      accountType,
+      normalBalance:
+        ACCOUNT_TYPE_DEFAULT_NORMAL_BALANCE[
+          accountType
+        ],
+    }));
+  }
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault();
+    setFormError(null);
+
+    const accountCode =
+      values.accountCode
+        .trim()
+        .toUpperCase();
+
+    const accountName =
+      values.accountName.trim();
+
+    if (!accountCode) {
+      setFormError(
+        "Enter an account code.",
+      );
+      return;
+    }
+
+    if (accountName.length < 2) {
+      setFormError(
+        "Enter an account name containing at least two characters.",
+      );
+      return;
+    }
+
+    const displayOrder = Number(
+      values.displayOrder,
+    );
+
+    if (
+      !Number.isInteger(displayOrder) ||
+      displayOrder < 0
+    ) {
+      setFormError(
+        "Display order must be a whole number of zero or greater.",
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      let savedAccount: LedgerAccount;
+
+      if (
+        isEditing &&
+        isProtectedSystemAccount
+      ) {
+        savedAccount =
+          await updateLedgerAccount(
+            account.id,
+            {
+              account_name:
+                accountName,
+              cash_flow_category:
+                values.cashFlowCategory ||
+                null,
+              parent_account_id:
+                nullableText(
+                  values.parentAccountId,
+                ),
+              description:
+                nullableText(
+                  values.description,
+                ),
+              display_order:
+                displayOrder,
+            },
+          );
+      } else {
+        const payload: LedgerAccountCreatePayload =
+          {
+            account_code:
+              accountCode,
+            account_name:
+              accountName,
+            account_type:
+              values.accountType,
+            report_category:
+              values.reportCategory,
+            cash_flow_category:
+              values.cashFlowCategory ||
+              null,
+            normal_balance:
+              values.normalBalance,
+            parent_account_id:
+              nullableText(
+                values.parentAccountId,
+              ),
+            description:
+              nullableText(
+                values.description,
+              ),
+            display_order:
+              displayOrder,
+          };
+
+        savedAccount = isEditing
+          ? await updateLedgerAccount(
+              account.id,
+              payload,
+            )
+          : await createLedgerAccount(
+              company.id,
+              payload,
+            );
+      }
+
+      await onSaved(savedAccount);
+    } catch (error) {
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "The ledger account could not be saved.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="ledger-editor-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (
+          event.target ===
+            event.currentTarget &&
+          !isSubmitting
+        ) {
+          onClose();
+        }
+      }}
+    >
+      <aside
+        className="ledger-editor"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ledger-editor-title"
+      >
+        <header className="ledger-editor__header">
+          <div>
+            <p className="eyebrow">
+              {isEditing
+                ? "Account settings"
+                : "Custom ledger account"}
+            </p>
+
+            <h2 id="ledger-editor-title">
+              {isEditing
+                ? "Edit ledger account"
+                : "Add ledger account"}
+            </h2>
+
+            <p>
+              Classify each account correctly
+              so the accounting engine knows
+              where to place it in the
+              financial statements.
+            </p>
+          </div>
+
+          <button
+            className="ledger-editor__close"
+            type="button"
+            aria-label="Close account form"
+            disabled={isSubmitting}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <form
+          className="ledger-form"
+          onSubmit={handleSubmit}
+        >
+          {formError ? (
+            <div
+              className="form-alert form-alert--error"
+              role="alert"
+            >
+              {formError}
+            </div>
+          ) : null}
+
+          {isProtectedSystemAccount ? (
+            <div className="ledger-system-notice">
+              <strong>
+                Protected system account
+              </strong>
+
+              <p>
+                The account code, account
+                type, report category and
+                normal balance are protected
+                because financial calculations
+                depend on them.
+              </p>
+            </div>
+          ) : null}
+
+          <section className="ledger-form__section">
+            <div className="ledger-form__section-heading">
+              <span>01</span>
+
+              <div>
+                <h3>
+                  Account identity
+                </h3>
+
+                <p>
+                  The account code must be
+                  unique within{" "}
+                  {company.name}.
+                </p>
+              </div>
+            </div>
+
+            <div className="ledger-form__grid">
+              <label className="form-field">
+                <span>
+                  Account code
+                  <strong>*</strong>
+                </span>
+
+                <input
+                  required
+                  maxLength={30}
+                  disabled={
+                    isProtectedSystemAccount
+                  }
+                  value={
+                    values.accountCode
+                  }
+                  placeholder="Example: 7150"
+                  onChange={(event) =>
+                    setField(
+                      "accountCode",
+                      event.target.value
+                        .toUpperCase(),
+                    )
+                  }
+                />
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Display order
+                  <strong>*</strong>
+                </span>
+
+                <input
+                  required
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={
+                    values.displayOrder
+                  }
+                  onChange={(event) =>
+                    setField(
+                      "displayOrder",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              <label className="form-field form-field--full">
+                <span>
+                  Account name
+                  <strong>*</strong>
+                </span>
+
+                <input
+                  required
+                  minLength={2}
+                  maxLength={180}
+                  value={
+                    values.accountName
+                  }
+                  placeholder="Example: Software Subscriptions"
+                  onChange={(event) =>
+                    setField(
+                      "accountName",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              <label className="form-field form-field--full">
+                <span>
+                  Description
+                </span>
+
+                <textarea
+                  rows={4}
+                  maxLength={2000}
+                  value={
+                    values.description
+                  }
+                  placeholder="Explain what should be recorded in this account"
+                  onChange={(event) =>
+                    setField(
+                      "description",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="ledger-form__section">
+            <div className="ledger-form__section-heading">
+              <span>02</span>
+
+              <div>
+                <h3>
+                  Financial classification
+                </h3>
+
+                <p>
+                  The selected report category
+                  automatically determines the
+                  main account type.
+                </p>
+              </div>
+            </div>
+
+            <div className="ledger-form__grid">
+              <label className="form-field">
+                <span>
+                  Report category
+                  <strong>*</strong>
+                </span>
+
+                <select
+                  disabled={
+                    isProtectedSystemAccount
+                  }
+                  value={
+                    values.reportCategory
+                  }
+                  onChange={(event) =>
+                    handleReportCategoryChange(
+                      event.target
+                        .value as ReportCategory,
+                    )
+                  }
+                >
+                  {REPORT_CATEGORY_OPTIONS.map(
+                    (option) => (
+                      <option
+                        value={option.value}
+                        key={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Account type
+                  <strong>*</strong>
+                </span>
+
+                <select
+                  disabled
+                  value={
+                    values.accountType
+                  }
+                >
+                  {ACCOUNT_TYPE_OPTIONS.map(
+                    (option) => (
+                      <option
+                        value={option.value}
+                        key={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ),
+                  )}
+                </select>
+
+                <small>
+                  Determined automatically
+                  from the report category.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Normal balance
+                  <strong>*</strong>
+                </span>
+
+                <select
+                  disabled={
+                    isProtectedSystemAccount
+                  }
+                  value={
+                    values.normalBalance
+                  }
+                  onChange={(event) =>
+                    setField(
+                      "normalBalance",
+                      event.target
+                        .value as NormalBalance,
+                    )
+                  }
+                >
+                  {NORMAL_BALANCE_OPTIONS.map(
+                    (option) => (
+                      <option
+                        value={option.value}
+                        key={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Cash-flow category
+                </span>
+
+                <select
+                  value={
+                    values.cashFlowCategory
+                  }
+                  onChange={(event) =>
+                    setField(
+                      "cashFlowCategory",
+                      event.target
+                        .value as
+                        | CashFlowCategory
+                        | "",
+                    )
+                  }
+                >
+                  <option value="">
+                    Not assigned
+                  </option>
+
+                  {CASH_FLOW_CATEGORY_OPTIONS.map(
+                    (option) => (
+                      <option
+                        value={option.value}
+                        key={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="ledger-form__section">
+            <div className="ledger-form__section-heading">
+              <span>03</span>
+
+              <div>
+                <h3>
+                  Account grouping
+                </h3>
+
+                <p>
+                  A parent account can be used
+                  later to group related
+                  accounts in reports.
+                </p>
+              </div>
+            </div>
+
+            <label className="form-field">
+              <span>
+                Parent account
+              </span>
+
+              <select
+                value={
+                  values.parentAccountId
+                }
+                onChange={(event) =>
+                  setField(
+                    "parentAccountId",
+                    event.target.value,
+                  )
+                }
+              >
+                <option value="">
+                  No parent account
+                </option>
+
+                {parentOptions.map(
+                  (candidate) => (
+                    <option
+                      value={candidate.id}
+                      key={candidate.id}
+                    >
+                      {candidate.account_code}
+                      {" — "}
+                      {candidate.account_name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          </section>
+
+          <footer className="ledger-form__footer">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSubmitting}
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={isSubmitting}
+            >
+              {isSubmitting
+                ? "Saving account..."
+                : isEditing
+                  ? "Save account"
+                  : "Add account"}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>
+  );
+}
+===== LEDGER ACCOUNTS API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  ChartInitializationResponse,
+  LedgerAccount,
+  LedgerAccountCreatePayload,
+  LedgerAccountListQuery,
+  LedgerAccountListResponse,
+  LedgerAccountUpdatePayload,
+} from "@/types/ledger-account";
+
+export async function listLedgerAccounts(
+  companyId: string,
+  query: LedgerAccountListQuery = {},
+): Promise<LedgerAccountListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (query.search) {
+    searchParameters.set(
+      "search",
+      query.search,
+    );
+  }
+
+  if (query.accountType) {
+    searchParameters.set(
+      "account_type",
+      query.accountType,
+    );
+  }
+
+  if (query.reportCategory) {
+    searchParameters.set(
+      "report_category",
+      query.reportCategory,
+    );
+  }
+
+  if (query.includeInactive) {
+    searchParameters.set(
+      "include_inactive",
+      "true",
+    );
+  }
+
+  if (query.offset !== undefined) {
+    searchParameters.set(
+      "offset",
+      String(query.offset),
+    );
+  }
+
+  if (query.limit !== undefined) {
+    searchParameters.set(
+      "limit",
+      String(query.limit),
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<LedgerAccountListResponse>(
+    `/api/companies/${encodeURIComponent(
+      companyId,
+    )}/chart-of-accounts${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function initializeChartOfAccounts(
+  companyId: string,
+): Promise<ChartInitializationResponse> {
+  return apiRequest<ChartInitializationResponse>(
+    `/api/companies/${encodeURIComponent(
+      companyId,
+    )}/chart-of-accounts/initialize`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function createLedgerAccount(
+  companyId: string,
+  payload: LedgerAccountCreatePayload,
+): Promise<LedgerAccount> {
+  return apiRequest<LedgerAccount>(
+    `/api/companies/${encodeURIComponent(
+      companyId,
+    )}/chart-of-accounts`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateLedgerAccount(
+  accountId: string,
+  payload: LedgerAccountUpdatePayload,
+): Promise<LedgerAccount> {
+  return apiRequest<LedgerAccount>(
+    `/api/ledger-accounts/${encodeURIComponent(
+      accountId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deactivateLedgerAccount(
+  accountId: string,
+): Promise<LedgerAccount> {
+  return apiRequest<LedgerAccount>(
+    `/api/ledger-accounts/${encodeURIComponent(
+      accountId,
+    )}/deactivate`,
+    {
+      method: "PATCH",
+    },
+  );
+}
+===== FINANCIAL REPORTS API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  FinancialReport,
+  FinancialReportCreatePayload,
+  FinancialReportListQuery,
+  FinancialReportListResponse,
+  FinancialReportUpdatePayload,
+} from "@/types/financial-report";
+
+export async function listFinancialReports(
+  query: FinancialReportListQuery = {},
+): Promise<FinancialReportListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (query.companyId) {
+    searchParameters.set(
+      "company_id",
+      query.companyId,
+    );
+  }
+
+  if (query.search) {
+    searchParameters.set(
+      "search",
+      query.search,
+    );
+  }
+
+  if (query.status) {
+    searchParameters.set(
+      "status",
+      query.status,
+    );
+  }
+
+  if (query.includeArchived) {
+    searchParameters.set(
+      "include_archived",
+      "true",
+    );
+  }
+
+  if (query.offset !== undefined) {
+    searchParameters.set(
+      "offset",
+      String(query.offset),
+    );
+  }
+
+  if (query.limit !== undefined) {
+    searchParameters.set(
+      "limit",
+      String(query.limit),
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<FinancialReportListResponse>(
+    `/api/financial-reports${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function getFinancialReport(
+  reportId: string,
+): Promise<FinancialReport> {
+  return apiRequest<FinancialReport>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}`,
+  );
+}
+
+export async function createFinancialReport(
+  payload: FinancialReportCreatePayload,
+): Promise<FinancialReport> {
+  return apiRequest<FinancialReport>(
+    "/api/financial-reports",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateFinancialReport(
+  reportId: string,
+  payload: FinancialReportUpdatePayload,
+): Promise<FinancialReport> {
+  return apiRequest<FinancialReport>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+===== FINALISATION API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  CreateFinancialReportRevisionPayload,
+  FinalisationFinancialReport,
+  FinaliseFinancialReportPayload,
+  FinaliseFinancialReportResponse,
+  FinancialReportVersionDetail,
+  FinancialReportVersionListResponse,
+  ReportFinalisationReadiness,
+} from "@/types/report-finalisation";
+
+function jsonRequest(
+  method: "POST" | "PATCH",
+  payload: unknown,
+): RequestInit {
+  return {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  };
+}
+
+export async function getReportFinalisationReadiness(
+  reportId: string,
+): Promise<ReportFinalisationReadiness> {
+  return apiRequest<ReportFinalisationReadiness>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/finalisation-readiness`,
+  );
+}
+
+export async function finaliseFinancialReport(
+  reportId: string,
+  payload: FinaliseFinancialReportPayload,
+): Promise<FinaliseFinancialReportResponse> {
+  return apiRequest<FinaliseFinancialReportResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/finalise`,
+    jsonRequest(
+      "POST",
+      payload,
+    ),
+  );
+}
+
+export async function listFinancialReportVersions(
+  reportId: string,
+): Promise<FinancialReportVersionListResponse> {
+  return apiRequest<FinancialReportVersionListResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/versions`,
+  );
+}
+
+export async function getFinancialReportVersion(
+  versionId: string,
+): Promise<FinancialReportVersionDetail> {
+  return apiRequest<FinancialReportVersionDetail>(
+    `/api/financial-report-versions/${encodeURIComponent(
+      versionId,
+    )}`,
+  );
+}
+
+export async function createFinancialReportRevision(
+  reportId: string,
+  payload: CreateFinancialReportRevisionPayload,
+): Promise<FinalisationFinancialReport> {
+  return apiRequest<FinalisationFinancialReport>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/revisions`,
+    jsonRequest(
+      "POST",
+      payload,
+    ),
+  );
+}
+===== FINANCIAL REPORT TYPES =====
+import type {
+  BusinessType,
+} from "@/types/company";
+
+export const REPORT_TYPE_OPTIONS = [
+  {
+    value: "annual_financial_statements",
+    label: "Annual financial statements",
+  },
+  {
+    value: "management_accounts",
+    label: "Management accounts",
+  },
+  {
+    value: "tax_computation",
+    label: "Tax computation",
+  },
+  {
+    value: "custom_report",
+    label: "Custom financial report",
+  },
+] as const;
+
+export const REPORT_STATUS_OPTIONS = [
+  {
+    value: "draft",
+    label: "Draft",
+  },
+  {
+    value: "incomplete",
+    label: "Incomplete",
+  },
+  {
+    value: "ready_for_review",
+    label: "Ready for review",
+  },
+  {
+    value: "finalised",
+    label: "Finalised",
+  },
+  {
+    value: "printed",
+    label: "Printed",
+  },
+  {
+    value: "archived",
+    label: "Archived",
+  },
+] as const;
+
+export type ReportType =
+  (typeof REPORT_TYPE_OPTIONS)[number]["value"];
+
+export type ReportStatus =
+  (typeof REPORT_STATUS_OPTIONS)[number]["value"];
+
+export type FinancialReport = {
+  id: string;
+  company_id: string;
+  comparison_report_id: string | null;
+
+  title: string;
+  report_type: ReportType;
+
+  period_start: string;
+  period_end: string;
+  financial_year: number;
+
+  currency: string;
+  business_template: BusinessType;
+  status: ReportStatus;
+
+  accountant_report_text: string | null;
+  finalised_at: string | null;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type FinancialReportListResponse = {
+  items: FinancialReport[];
+  total: number;
+  offset: number;
+  limit: number;
+};
+
+export type FinancialReportCreatePayload = {
+  company_id: string;
+  title?: string | null;
+  report_type: ReportType;
+  period_start: string;
+  period_end: string;
+  currency?: string | null;
+  business_template?: BusinessType | null;
+  comparison_report_id?: string | null;
+  accountant_report_text?: string | null;
+};
+
+export type FinancialReportUpdatePayload = {
+  title?: string | null;
+  report_type?: ReportType;
+  period_start?: string;
+  period_end?: string;
+  currency?: string | null;
+  business_template?: BusinessType | null;
+  comparison_report_id?: string | null;
+  accountant_report_text?: string | null;
+};
+
+export type FinancialReportListQuery = {
+  companyId?: string;
+  search?: string;
+  status?: ReportStatus;
+  includeArchived?: boolean;
+  offset?: number;
+  limit?: number;
+};
+===== ROOT LAYOUT =====
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Financial Statement Studio",
+  description:
+    "Professional desktop financial accounting and statement preparation software.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+===== FINANCIAL REPORT WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useState,
+} from "react";
+
+import { FinancialReportCard } from "@/components/financial-reports/financial-report-card";
+import { FinancialReportEditor } from "@/components/financial-reports/financial-report-editor";
+import {
+  listCompanies,
+} from "@/lib/companies-api";
+import {
+  listFinancialReports,
+} from "@/lib/financial-reports-api";
+import type {
+  Company,
+} from "@/types/company";
+import {
+  REPORT_STATUS_OPTIONS,
+  type FinancialReport,
+  type ReportStatus,
+} from "@/types/financial-report";
+
+type FinancialReportWorkspaceProps = {
+  initialCompanyId?: string;
+};
+
+type EditorState =
+  | {
+      mode: "create";
+    }
+  | {
+      mode: "edit";
+      report: FinancialReport;
+    }
+  | null;
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function FinancialReportWorkspace({
+  initialCompanyId = "",
+}: FinancialReportWorkspaceProps) {
+  const [companies, setCompanies] =
+    useState<Company[]>([]);
+
+  const [reports, setReports] =
+    useState<FinancialReport[]>([]);
+
+  const [total, setTotal] =
+    useState(0);
+
+  const [resourceState, setResourceState] =
+    useState<ResourceState>("loading");
+
+  const [loadError, setLoadError] =
+    useState<string | null>(null);
+
+  const [searchInput, setSearchInput] =
+    useState("");
+
+  const [appliedSearch, setAppliedSearch] =
+    useState("");
+
+  const [
+    selectedCompanyId,
+    setSelectedCompanyId,
+  ] = useState(initialCompanyId);
+
+  const [
+    selectedStatus,
+    setSelectedStatus,
+  ] = useState<ReportStatus | "">("");
+
+  const [reloadVersion, setReloadVersion] =
+    useState(0);
+
+  const [editorState, setEditorState] =
+    useState<EditorState>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      listCompanies({
+        includeInactive: false,
+        offset: 0,
+        limit: 100,
+      }),
+      listFinancialReports({
+        companyId:
+          selectedCompanyId || undefined,
+        search:
+          appliedSearch || undefined,
+        status:
+          selectedStatus || undefined,
+        offset: 0,
+        limit: 100,
+      }),
+    ])
+      .then(
+        ([
+          companyResponse,
+          reportResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setCompanies(
+            companyResponse.items,
+          );
+          setReports(
+            reportResponse.items,
+          );
+          setTotal(
+            reportResponse.total,
+          );
+          setResourceState("ready");
+        },
+      )
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setResourceState("error");
+        setLoadError(
+          getErrorMessage(
+            error,
+            "Financial reports could not be loaded.",
+          ),
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedSearch,
+    reloadVersion,
+    selectedCompanyId,
+    selectedStatus,
+  ]);
+
+  function requestReload(): void {
+    setResourceState("loading");
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  function handleSearch(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    const nextSearch =
+      searchInput.trim();
+
+    setResourceState("loading");
+    setLoadError(null);
+
+    if (nextSearch === appliedSearch) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+      return;
+    }
+
+    setAppliedSearch(nextSearch);
+  }
+
+  function clearFilters(): void {
+    setSearchInput("");
+    setResourceState("loading");
+    setLoadError(null);
+    setAppliedSearch("");
+    setSelectedCompanyId("");
+    setSelectedStatus("");
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  function handleCompanyFilter(
+    companyId: string,
+  ): void {
+    setResourceState("loading");
+    setLoadError(null);
+    setSelectedCompanyId(companyId);
+  }
+
+  function handleStatusFilter(
+    reportStatus: ReportStatus | "",
+  ): void {
+    setResourceState("loading");
+    setLoadError(null);
+    setSelectedStatus(reportStatus);
+  }
+
+  function handleReportSaved(): void {
+    setEditorState(null);
+    requestReload();
+  }
+
+  const companyNames = new Map(
+    companies.map((company) => [
+      company.id,
+      company.name,
+    ]),
+  );
+
+  const reportTitles = new Map(
+    reports.map((report) => [
+      report.id,
+      report.title,
+    ]),
+  );
+
+  const filtersApplied =
+    Boolean(
+      appliedSearch ||
+      selectedCompanyId ||
+      selectedStatus,
+    );
+
+  return (
+    <main className="reports-page">
+      <header className="app-topbar">
+        <Link
+          className="app-brand"
+          href="/"
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Financial reports
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href="/companies"
+          >
+            Companies
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href="/"
+          >
+            System status
+          </Link>
+        </div>
+      </header>
+
+      <section className="reports-hero">
+        <div>
+          <p className="eyebrow">
+            Financial documents
+          </p>
+
+          <h1>
+            Prepare, manage and review
+            financial reports.
+          </h1>
+
+          <p>
+            Each document belongs to one
+            company and reporting period.
+            Reports remain separate so one
+            year never overwrites another.
+          </p>
+        </div>
+
+        <div className="reports-hero__summary">
+          <span>
+            Available reports
+          </span>
+
+          <strong>
+            {resourceState === "ready"
+              ? total
+              : "—"}
+          </strong>
+
+          <button
+            className="primary-button"
+            type="button"
+            disabled={
+              resourceState === "ready" &&
+              companies.length === 0
+            }
+            onClick={() =>
+              setEditorState({
+                mode: "create",
+              })
+            }
+          >
+            New financial report
+          </button>
+        </div>
+      </section>
+
+      <section className="reports-toolbar">
+        <form
+          className="reports-search"
+          onSubmit={handleSearch}
+        >
+          <label htmlFor="report-search">
+            Search report titles
+          </label>
+
+          <div className="reports-search__controls">
+            <input
+              id="report-search"
+              type="search"
+              value={searchInput}
+              placeholder="Example: 2025 financial statements"
+              onChange={(event) =>
+                setSearchInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button
+              type="submit"
+              className="reports-search__button"
+            >
+              Search
+            </button>
+          </div>
+        </form>
+
+        <label className="reports-filter">
+          <span>Company</span>
+
+          <select
+            value={selectedCompanyId}
+            onChange={(event) =>
+              handleCompanyFilter(
+                event.target.value,
+              )
+            }
+          >
+            <option value="">
+              All companies
+            </option>
+
+            {companies.map(
+              (company) => (
+                <option
+                  value={company.id}
+                  key={company.id}
+                >
+                  {company.name}
+                </option>
+              ),
+            )}
+          </select>
+        </label>
+
+        <label className="reports-filter">
+          <span>Status</span>
+
+          <select
+            value={selectedStatus}
+            onChange={(event) =>
+              handleStatusFilter(
+                event.target
+                  .value as ReportStatus | "",
+              )
+            }
+          >
+            <option value="">
+              All active statuses
+            </option>
+
+            {REPORT_STATUS_OPTIONS.filter(
+              (option) =>
+                option.value !== "archived",
+            ).map((option) => (
+              <option
+                value={option.value}
+                key={option.value}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="reports-toolbar__actions">
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              resourceState === "loading"
+            }
+            onClick={requestReload}
+          >
+            Refresh
+          </button>
+
+          {filtersApplied ? (
+            <button
+              className="text-button"
+              type="button"
+              onClick={clearFilters}
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      <section
+        className="reports-content"
+        aria-busy={
+          resourceState === "loading"
+        }
+      >
+        {resourceState === "loading" ? (
+          <div className="report-loading-grid">
+            {[1, 2, 3].map(
+              (placeholder) => (
+                <div
+                  className="report-card report-card--loading"
+                  key={placeholder}
+                >
+                  <div />
+                  <div />
+                  <div />
+                  <div />
+                </div>
+              ),
+            )}
+          </div>
+        ) : null}
+
+        {resourceState === "error" ? (
+          <div className="report-state-card report-state-card--error">
+            <span>
+              Connection problem
+            </span>
+
+            <h2>
+              Financial reports could not
+              be loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={requestReload}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        companies.length === 0 ? (
+          <div className="report-state-card">
+            <span>
+              Company required
+            </span>
+
+            <h2>
+              Create a company before
+              preparing a report
+            </h2>
+
+            <p>
+              Every financial report must
+              belong to a business or
+              organisation.
+            </p>
+
+            <Link
+              className="primary-button"
+              href="/companies"
+            >
+              Create a company
+            </Link>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        companies.length > 0 &&
+        reports.length === 0 ? (
+          <div className="report-state-card">
+            <span>
+              {filtersApplied
+                ? "No matching reports"
+                : "No reports yet"}
+            </span>
+
+            <h2>
+              {filtersApplied
+                ? "No report matches the selected filters"
+                : "Create your first financial report"}
+            </h2>
+
+            <p>
+              {filtersApplied
+                ? "Change or clear the current filters and try again."
+                : "Select a company and reporting period to create a separate financial document."}
+            </p>
+
+            {filtersApplied ? (
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={clearFilters}
+              >
+                Clear filters
+              </button>
+            ) : (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() =>
+                  setEditorState({
+                    mode: "create",
+                  })
+                }
+              >
+                Create first report
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        reports.length > 0 ? (
+          <>
+            <div className="reports-content__heading">
+              <div>
+                <p className="eyebrow">
+                  Financial documents
+                </p>
+
+                <h2>
+                  {total === 1
+                    ? "1 report"
+                    : `${total} reports`}
+                </h2>
+              </div>
+
+              <p>
+                Open a report to continue
+                entering financial
+                information or edit its
+                setup details.
+              </p>
+            </div>
+
+            <div className="reports-grid">
+              {reports.map((report) => (
+                <FinancialReportCard
+                  report={report}
+                  companyName={
+                    companyNames.get(
+                      report.company_id,
+                    ) ??
+                    "Unknown company"
+                  }
+                  comparisonTitle={
+                    report.comparison_report_id
+                      ? reportTitles.get(
+                          report.comparison_report_id,
+                        ) ?? "Earlier report"
+                      : null
+                  }
+                  key={report.id}
+                  onEdit={(
+                    selectedReport,
+                  ) =>
+                    setEditorState({
+                      mode: "edit",
+                      report:
+                        selectedReport,
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      <footer className="company-page__footer">
+        <span>
+          Financial Statement Studio
+        </span>
+
+        <span>
+          Reports are stored locally in
+          SQLite.
+        </span>
+      </footer>
+
+      {editorState ? (
+        <FinancialReportEditor
+          key={
+            editorState.mode === "edit"
+              ? editorState.report.id
+              : `new-report-${
+                  selectedCompanyId ||
+                  initialCompanyId ||
+                  "general"
+                }`
+          }
+          companies={companies}
+          reports={reports}
+          report={
+            editorState.mode === "edit"
+              ? editorState.report
+              : null
+          }
+          initialCompanyId={
+            selectedCompanyId ||
+            initialCompanyId
+          }
+          onClose={() =>
+            setEditorState(null)
+          }
+          onSaved={
+            handleReportSaved
+          }
+        />
+      ) : null}
+    </main>
+  );
+}

@@ -466,7 +466,8 @@ export function ReportFinalisationWorkspace({
       <section className="finalisation-hero">
         <div>
           <p className="eyebrow">
-            Approval and version control
+            {company?.name ??
+              "Approval and version control"}
           </p>
 
           <h1>
