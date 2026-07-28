@@ -1,7 +1,9 @@
 from collections.abc import (
     Generator,
 )
+import json
 from datetime import date
+from decimal import Decimal
 from hashlib import sha256
 
 import pytest
@@ -39,6 +41,9 @@ from app.models.ledger_account import (
     LedgerAccount,
 )
 from app.models.mixins import utc_now
+from app.models.tax_calculation import (
+    TaxCalculation,
+)
 
 
 def enable_foreign_keys(
@@ -763,4 +768,378 @@ def test_only_one_direct_revision_can_be_created(
     assert (
         second_revision.status_code
         == 409
+    )
+
+def configure_report_tax(
+    client: TestClient,
+    *,
+    company_id: str,
+    report_id: str,
+) -> dict[str, object]:
+    chart_response = client.post(
+        (
+            f"/api/companies/{company_id}"
+            "/chart-of-accounts/initialize"
+        ),
+    )
+
+    assert chart_response.status_code == 200
+
+    profile_response = client.post(
+        "/api/tax-profiles",
+        json={
+            "company_id": company_id,
+            "profile_code":
+                "FINALISATION-TAX",
+            "profile_name":
+                "Finalisation Tax Profile",
+            "jurisdiction_country_code":
+                "GH",
+            "jurisdiction_name":
+                "Ghana",
+            "is_default": True,
+            "is_active": True,
+        },
+    )
+
+    assert (
+        profile_response.status_code
+        == 201
+    )
+
+    profile = profile_response.json()
+
+    rule_response = client.post(
+        (
+            f"/api/tax-profiles/"
+            f"{profile['id']}/rules"
+        ),
+        json={
+            "rule_code":
+                "CIT-FINALISATION",
+            "rule_name":
+                "Finalisation Income Tax",
+            "tax_type":
+                "corporate_income_tax",
+            "calculation_method":
+                "percentage",
+            "rate_percentage":
+                "25.000000",
+            "fixed_amount": None,
+            "currency": "GHS",
+            "effective_from":
+                "2025-01-01",
+            "effective_to": None,
+            "display_order": 10,
+        },
+    )
+
+    assert rule_response.status_code == 201
+
+    rule = rule_response.json()
+
+    activation_response = client.post(
+        (
+            f"/api/tax-rules/"
+            f"{rule['id']}/activate"
+        ),
+    )
+
+    assert (
+        activation_response.status_code
+        == 200
+    )
+
+    calculation_response = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report_id}"
+            "/tax-calculations"
+        ),
+        json={
+            "tax_profile_id":
+                profile["id"],
+            "rule_code":
+                "CIT-FINALISATION",
+            "calculation_date":
+                "2025-12-31",
+            "tax_base": "1000.00",
+        },
+    )
+
+    assert (
+        calculation_response.status_code
+        == 201
+    )
+
+    return calculation_response.json()
+
+
+def test_tax_readiness_and_snapshot_are_preserved(
+    test_context,
+) -> None:
+    client, session_factory = (
+        test_context
+    )
+
+    company, report = (
+        create_company_and_report(
+            client,
+        )
+    )
+
+    seed_balanced_report(
+        session_factory,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    calculation = configure_report_tax(
+        client,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    readiness_response = client.get(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}"
+            "/finalisation-readiness"
+        ),
+    )
+
+    assert (
+        readiness_response.status_code
+        == 200
+    )
+
+    readiness = readiness_response.json()
+
+    assert readiness[
+        "tax_calculation_count"
+    ] == 1
+
+    assert readiness[
+        "draft_tax_calculation_count"
+    ] == 1
+
+    assert (
+        readiness[
+            "tax_reconciliation_status"
+        ]
+        == "under_posted"
+    )
+
+    assert readiness[
+        "can_finalise"
+    ] is True
+
+    warning_codes = {
+        warning["code"]
+        for warning
+        in readiness["warnings"]
+    }
+
+    assert (
+        "draft_tax_calculations"
+        in warning_codes
+    )
+
+    assert (
+        "tax_under_posted"
+        in warning_codes
+    )
+
+    finalise_response = finalise_report(
+        client,
+        str(report["id"]),
+    )
+
+    assert (
+        finalise_response.status_code
+        == 200
+    )
+
+    version_id = (
+        finalise_response.json()[
+            "version"
+        ]["id"]
+    )
+
+    version_response = client.get(
+        (
+            "/api/financial-report-versions/"
+            f"{version_id}"
+        ),
+    )
+
+    assert (
+        version_response.status_code
+        == 200
+    )
+
+    snapshot = version_response.json()[
+        "snapshot"
+    ]
+
+    assert (
+        snapshot[
+            "snapshot_format_version"
+        ]
+        == 2
+    )
+
+    assert len(
+        snapshot["tax_calculations"],
+    ) == 1
+
+    assert (
+        snapshot[
+            "tax_calculations"
+        ][0]["id"]
+        == calculation["id"]
+    )
+
+    assert (
+        snapshot[
+            "tax_reconciliation"
+        ]["status"]
+        == "under_posted"
+    )
+
+    assert (
+        snapshot[
+            "tax_reconciliation"
+        ]["difference"]
+        == "250.00"
+    )
+
+
+def test_revision_copies_tax_calculations(
+    test_context,
+) -> None:
+    client, session_factory = (
+        test_context
+    )
+
+    company, report = (
+        create_company_and_report(
+            client,
+        )
+    )
+
+    seed_balanced_report(
+        session_factory,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    source_calculation = (
+        configure_report_tax(
+            client,
+            company_id=str(
+                company["id"],
+            ),
+            report_id=str(
+                report["id"],
+            ),
+        )
+    )
+
+    assert finalise_report(
+        client,
+        str(report["id"]),
+    ).status_code == 200
+
+    revision_response = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}/revisions"
+        ),
+        json={
+            "revision_reason":
+                "Review the tax calculation.",
+        },
+    )
+
+    assert (
+        revision_response.status_code
+        == 201
+    )
+
+    revision = revision_response.json()
+
+    database_session = (
+        session_factory()
+    )
+
+    try:
+        copied_calculations = list(
+            database_session.scalars(
+                select(
+                    TaxCalculation,
+                )
+                .where(
+                    TaxCalculation
+                    .financial_report_id
+                    == revision["id"],
+                ),
+            ).all(),
+        )
+    finally:
+        database_session.close()
+
+    assert len(copied_calculations) == 1
+
+    copied_calculation = (
+        copied_calculations[0]
+    )
+
+    assert (
+        copied_calculation.tax_amount
+        == Decimal("250.00")
+    )
+
+    assert (
+        copied_calculation.status
+        == "draft"
+    )
+
+    assert (
+        copied_calculation.tax_rule_id
+        == source_calculation[
+            "tax_rule_id"
+        ]
+    )
+
+    copied_details = json.loads(
+        copied_calculation
+        .calculation_details_json
+        or "{}",
+    )
+
+    assert (
+        copied_details[
+            "copied_from_tax_calculation_id"
+        ]
+        == source_calculation["id"]
+    )
+
+    assert (
+        copied_details[
+            "copied_from_report_id"
+        ]
+        == report["id"]
     )

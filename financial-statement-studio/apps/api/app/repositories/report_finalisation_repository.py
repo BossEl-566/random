@@ -23,6 +23,9 @@ from app.models.journal_entry import (
 from app.models.ledger_account import (
     LedgerAccount,
 )
+from app.models.tax_calculation import (
+    TaxCalculation,
+)
 
 
 class ReportFinalisationRepository:
@@ -117,6 +120,42 @@ class ReportFinalisationRepository:
                 FinancialReportNote
                 .created_at
                 .asc(),
+            )
+        )
+
+        return list(
+            database_session.scalars(
+                statement,
+            ).all(),
+        )
+    
+    def list_tax_calculations(
+        self,
+        database_session: Session,
+        report_id: str,
+    ) -> list[TaxCalculation]:
+        """
+        Return all tax calculations belonging to a report.
+
+        The order is deterministic so that finalised snapshots produce
+        stable JSON when the underlying records have not changed.
+        """
+
+        statement = (
+            select(TaxCalculation)
+            .where(
+                TaxCalculation
+                .financial_report_id
+                == report_id,
+            )
+            .order_by(
+                TaxCalculation
+                .calculation_date
+                .asc(),
+                TaxCalculation
+                .created_at
+                .asc(),
+                TaxCalculation.id.asc(),
             )
         )
 

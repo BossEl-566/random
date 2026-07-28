@@ -45,6 +45,13 @@ from app.schemas.report_finalisation import (
 from app.services.journal_entry_service import (
     JournalEntryService,
 )
+from app.services.tax_configuration_service import (
+    TaxConfigurationService,
+    TaxConfigurationServiceError,
+)
+from app.models.tax_calculation import (
+    TaxCalculation,
+)
 
 
 LOCKED_REPORT_STATUSES = {
@@ -117,6 +124,9 @@ class ReportFinalisationService:
         journal_entry_service:
             JournalEntryService
             | None = None,
+        tax_configuration_service:
+            TaxConfigurationService
+            | None = None,
     ) -> None:
         self.repository = (
             repository
@@ -126,6 +136,11 @@ class ReportFinalisationService:
         self.journal_entry_service = (
             journal_entry_service
             or JournalEntryService()
+        )
+
+        self.tax_configuration_service = (
+            tax_configuration_service
+            or TaxConfigurationService()
         )
 
     def require_report(
@@ -282,6 +297,34 @@ class ReportFinalisationService:
             raise ReportFinalisationPersistenceError(
                 "Finalisation readiness could not be calculated.",
             ) from error
+        try:
+            tax_reconciliation = (
+                self.tax_configuration_service
+                .get_reconciliation(
+                    database_session,
+                    report.id,
+                )
+            )
+        except TaxConfigurationServiceError as error:
+            raise ReportFinalisationPersistenceError(
+                "Tax finalisation readiness could not be calculated.",
+            ) from error
+
+        tax_calculation_count = len(
+            tax_reconciliation.calculations,
+        )
+
+        draft_tax_calculation_count = sum(
+            1
+            for calculation
+            in tax_reconciliation.calculations
+            if calculation.status.value
+            == "draft"
+        )
+
+        tax_reconciliation_status = (
+            tax_reconciliation.status.value
+        )
 
         if posted_entry_count == 0:
             blockers.append(
@@ -322,6 +365,82 @@ class ReportFinalisationService:
                     detail=(
                         "Total debit balances must equal "
                         "total credit balances."
+                    ),
+                ),
+            )
+        
+        if tax_calculation_count == 0:
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_not_configured",
+                    title=(
+                        "Tax has not been configured"
+                    ),
+                    detail=(
+                        "No tax calculation has been recorded "
+                        "for this report. Review whether tax "
+                        "configuration is required before "
+                        "finalisation."
+                    ),
+                ),
+            )
+
+        if draft_tax_calculation_count > 0:
+            warnings.append(
+                FinalisationCheck(
+                    code=(
+                        "draft_tax_calculations"
+                    ),
+                    title=(
+                        "Draft tax calculations remain"
+                    ),
+                    detail=(
+                        f"{draft_tax_calculation_count} tax "
+                        "calculation or calculations remain "
+                        "in draft status."
+                    ),
+                ),
+            )
+
+        if (
+            tax_reconciliation_status
+            == "under_posted"
+        ):
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_under_posted",
+                    title=(
+                        "Calculated tax exceeds "
+                        "ledger taxation"
+                    ),
+                    detail=(
+                        "Configured taxation exceeds "
+                        "the taxation posted to the ledger "
+                        f"by {report.currency} "
+                        f"{tax_reconciliation.difference:.2f}. "
+                        "Review or post the outstanding "
+                        "tax adjustment."
+                    ),
+                ),
+            )
+
+        elif (
+            tax_reconciliation_status
+            == "over_posted"
+        ):
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_over_posted",
+                    title=(
+                        "Ledger taxation exceeds "
+                        "calculated tax"
+                    ),
+                    detail=(
+                        "Taxation posted to the ledger "
+                        "exceeds configured taxation by "
+                        f"{report.currency} "
+                        f"{abs(tax_reconciliation.difference):.2f}. "
+                        "Review existing tax entries manually."
                     ),
                 ),
             )
@@ -384,6 +503,18 @@ class ReportFinalisationService:
                 trial_balance_is_balanced=(
                     trial_balance.is_balanced
                 ),
+                tax_calculation_count=(
+                    tax_calculation_count
+                ),
+                draft_tax_calculation_count=(
+                    draft_tax_calculation_count
+                ),
+                tax_reconciliation_status=(
+                    tax_reconciliation_status
+                ),
+                tax_reconciliation_difference=(
+                    tax_reconciliation.difference
+                ),
                 blockers=blockers,
                 warnings=warnings,
                 checked_at=utc_now(),
@@ -431,6 +562,27 @@ class ReportFinalisationService:
             report.id,
         )
 
+        tax_calculations = (
+            self.repository
+            .list_tax_calculations(
+                database_session,
+                report.id,
+            )
+        )
+
+        try:
+            tax_reconciliation = (
+                self.tax_configuration_service
+                .get_reconciliation(
+                    database_session,
+                    report.id,
+                )
+            )
+        except TaxConfigurationServiceError as error:
+            raise ReportFinalisationPersistenceError(
+                "Tax reconciliation could not be included in the report snapshot.",
+            ) from error
+
         trial_balance = (
             self.journal_entry_service
             .calculate_trial_balance(
@@ -441,7 +593,7 @@ class ReportFinalisationService:
         )
 
         snapshot: dict[str, Any] = {
-            "snapshot_format_version": 1,
+            "snapshot_format_version": 2,
             "finalisation": {
                 "finalised_at": (
                     finalised_at.isoformat()
@@ -676,34 +828,99 @@ class ReportFinalisationService:
                 }
                 for entry in entries
             ],
-            "notes": [
+            "tax_calculations": [
                 {
-                    "id": note.id,
-                    "template_id": (
-                        note.template_id
+                    "id": calculation.id,
+                    "financial_report_id": (
+                        calculation
+                        .financial_report_id
                     ),
-                    "note_number": (
-                        note.note_number
+                    "tax_rule_id": (
+                        calculation.tax_rule_id
                     ),
-                    "title": note.title,
-                    "note_type": (
-                        note.note_type
+                    "calculation_date": (
+                        calculation
+                        .calculation_date
+                        .isoformat()
                     ),
-                    "statement_name": (
-                        note
-                        .statement_name
+                    "tax_base": (
+                        serialise_snapshot_value(
+                            calculation.tax_base,
+                        )
                     ),
-                    "statement_line_key": (
-                        note
-                        .statement_line_key
+                    "tax_amount": (
+                        serialise_snapshot_value(
+                            calculation.tax_amount,
+                        )
                     ),
-                    "content": note.content,
-                    "is_active": (
-                        note.is_active
+                    "currency": (
+                        calculation.currency
+                    ),
+                    "rule_code_snapshot": (
+                        calculation
+                        .rule_code_snapshot
+                    ),
+                    "rule_name_snapshot": (
+                        calculation
+                        .rule_name_snapshot
+                    ),
+                    "tax_type_snapshot": (
+                        calculation
+                        .tax_type_snapshot
+                    ),
+                    "calculation_method_snapshot": (
+                        calculation
+                        .calculation_method_snapshot
+                    ),
+                    "rate_applied": (
+                        serialise_snapshot_value(
+                            calculation
+                            .rate_applied,
+                        )
+                        if (
+                            calculation
+                            .rate_applied
+                            is not None
+                        )
+                        else None
+                    ),
+                    "fixed_amount_applied": (
+                        serialise_snapshot_value(
+                            calculation
+                            .fixed_amount_applied,
+                        )
+                        if (
+                            calculation
+                            .fixed_amount_applied
+                            is not None
+                        )
+                        else None
+                    ),
+                    "calculation_details_json": (
+                        calculation
+                        .calculation_details_json
+                    ),
+                    "status": (
+                        calculation.status
+                    ),
+                    "calculated_at": (
+                        calculation
+                        .calculated_at
+                        .isoformat()
                     ),
                 }
-                for note in notes
+                for calculation
+                in tax_calculations
             ],
+            "tax_reconciliation": (
+                tax_reconciliation.model_dump(
+                    mode="json",
+                    exclude={
+                        "calculations",
+                        "generated_at",
+                    },
+                )
+            ),
             "trial_balance": (
                 trial_balance.model_dump(
                     mode="json",
@@ -1108,6 +1325,165 @@ class ReportFinalisationService:
             ),
         )
 
+    def copy_tax_calculation(
+        self,
+        source_calculation:
+            TaxCalculation,
+        *,
+        target_report_id: str,
+        journal_entry_id_map:
+            dict[str, str],
+    ) -> TaxCalculation:
+        """
+        Copy a tax calculation into a controlled report revision.
+
+        A confirmed tax calculation may contain the identifier of the
+        journal entry created by controlled tax posting. That identifier
+        must point to the copied journal in the new revision rather than
+        the immutable journal belonging to the original report.
+        """
+
+        details: dict[str, Any]
+
+        if (
+            source_calculation
+            .calculation_details_json
+        ):
+            try:
+                loaded_details = json.loads(
+                    source_calculation
+                    .calculation_details_json,
+                )
+            except json.JSONDecodeError:
+                loaded_details = {
+                    "previous_details_raw": (
+                        source_calculation
+                        .calculation_details_json
+                    ),
+                }
+
+            if isinstance(
+                loaded_details,
+                dict,
+            ):
+                details = loaded_details
+            else:
+                details = {
+                    "previous_details": (
+                        loaded_details
+                    ),
+                }
+        else:
+            details = {}
+
+        source_journal_entry_id = (
+            details.get(
+                "journal_entry_id",
+            )
+        )
+
+        if isinstance(
+            source_journal_entry_id,
+            str,
+        ):
+            copied_journal_entry_id = (
+                journal_entry_id_map.get(
+                    source_journal_entry_id,
+                )
+            )
+
+            if copied_journal_entry_id:
+                details[
+                    "journal_entry_id"
+                ] = (
+                    copied_journal_entry_id
+                )
+            else:
+                details[
+                    "source_journal_entry_id"
+                ] = (
+                    source_journal_entry_id
+                )
+
+                details[
+                    "journal_entry_id"
+                ] = None
+
+        details[
+            "copied_from_tax_calculation_id"
+        ] = source_calculation.id
+
+        details[
+            "copied_from_report_id"
+        ] = (
+            source_calculation
+            .financial_report_id
+        )
+
+        return TaxCalculation(
+            financial_report_id=(
+                target_report_id
+            ),
+            tax_rule_id=(
+                source_calculation
+                .tax_rule_id
+            ),
+            calculation_date=(
+                source_calculation
+                .calculation_date
+            ),
+            tax_base=(
+                source_calculation.tax_base
+            ),
+            tax_amount=(
+                source_calculation.tax_amount
+            ),
+            currency=(
+                source_calculation.currency
+            ),
+            rule_code_snapshot=(
+                source_calculation
+                .rule_code_snapshot
+            ),
+            rule_name_snapshot=(
+                source_calculation
+                .rule_name_snapshot
+            ),
+            tax_type_snapshot=(
+                source_calculation
+                .tax_type_snapshot
+            ),
+            calculation_method_snapshot=(
+                source_calculation
+                .calculation_method_snapshot
+            ),
+            rate_applied=(
+                source_calculation
+                .rate_applied
+            ),
+            fixed_amount_applied=(
+                source_calculation
+                .fixed_amount_applied
+            ),
+            calculation_details_json=(
+                json.dumps(
+                    details,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(
+                        ",",
+                        ":",
+                    ),
+                )
+            ),
+            status=(
+                source_calculation.status
+            ),
+            calculated_at=(
+                source_calculation
+                .calculated_at
+            ),
+        )
     def create_revision(
         self,
         database_session: Session,
@@ -1240,17 +1616,57 @@ class ReportFinalisationService:
                 )
             )
 
+            source_tax_calculations = (
+                self.repository
+                .list_tax_calculations(
+                    database_session,
+                    source_report.id,
+                )
+            )
+
+            copied_entry_pairs: list[
+                tuple[
+                    str,
+                    JournalEntry,
+                ]
+            ] = []
+
             for source_entry in (
                 source_entries
             ):
-                database_session.add(
+                copied_entry = (
                     self.copy_journal_entry(
                         source_entry,
                         target_report=(
                             revised_report
                         ),
+                    )
+                )
+
+                database_session.add(
+                    copied_entry,
+                )
+
+                copied_entry_pairs.append(
+                    (
+                        source_entry.id,
+                        copied_entry,
                     ),
                 )
+
+            # Flush assigns identifiers to copied journal entries
+            # before tax-calculation audit links are rewritten.
+            database_session.flush()
+
+            journal_entry_id_map = {
+                source_entry_id:
+                    copied_entry.id
+                for (
+                    source_entry_id,
+                    copied_entry,
+                )
+                in copied_entry_pairs
+            }
 
             for source_note in source_notes:
                 database_session.add(
@@ -1258,6 +1674,21 @@ class ReportFinalisationService:
                         source_note,
                         target_report_id=(
                             revised_report.id
+                        ),
+                    ),
+                )
+
+            for source_calculation in (
+                source_tax_calculations
+            ):
+                database_session.add(
+                    self.copy_tax_calculation(
+                        source_calculation,
+                        target_report_id=(
+                            revised_report.id
+                        ),
+                        journal_entry_id_map=(
+                            journal_entry_id_map
                         ),
                     ),
                 )

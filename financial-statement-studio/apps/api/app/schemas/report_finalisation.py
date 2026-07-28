@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import (
@@ -27,6 +28,12 @@ class ReportFinalisationReadinessResponse(
     active_note_count: int
 
     trial_balance_is_balanced: bool
+
+    tax_calculation_count: int
+    draft_tax_calculation_count: int
+
+    tax_reconciliation_status: str
+    tax_reconciliation_difference: Decimal
 
     blockers: list[FinalisationCheck]
     warnings: list[FinalisationCheck]
