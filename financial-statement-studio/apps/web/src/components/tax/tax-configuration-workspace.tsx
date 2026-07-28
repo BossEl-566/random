@@ -8,6 +8,7 @@ import {
 } from "react";
 
 import { TaxProfileEditor } from "@/components/tax/tax-profile-editor";
+import { TaxRuleRegister } from "@/components/tax/tax-rule-register";
 import {
   getCompany,
 } from "@/lib/companies-api";
@@ -142,6 +143,13 @@ export function TaxConfigurationWorkspace({
     null,
   );
 
+    const [
+    selectedProfileId,
+    setSelectedProfileId,
+  ] = useState<string | null>(
+    null,
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -191,6 +199,36 @@ export function TaxConfigurationWorkspace({
 
           setProfiles(
             profileResponse.items,
+          );
+
+          setSelectedProfileId(
+            (currentProfileId) => {
+              if (
+                currentProfileId &&
+                profileResponse.items.some(
+                  (profile) =>
+                    profile.id ===
+                    currentProfileId,
+                )
+              ) {
+                return currentProfileId;
+              }
+
+              return (
+                profileResponse.items.find(
+                  (profile) =>
+                    profile.is_default &&
+                    profile.is_active,
+                )?.id ??
+                profileResponse.items.find(
+                  (profile) =>
+                    profile.is_active,
+                )?.id ??
+                profileResponse.items[0]
+                  ?.id ??
+                null
+              );
+            },
           );
 
           setResourceState(
@@ -273,6 +311,13 @@ export function TaxConfigurationWorkspace({
     profiles.find(
       (profile) =>
         profile.is_default,
+    ) ?? null;
+
+      const selectedProfile =
+    profiles.find(
+      (profile) =>
+        profile.id ===
+        selectedProfileId,
     ) ?? null;
 
   function requestReload(): void {
@@ -822,7 +867,31 @@ export function TaxConfigurationWorkspace({
                             </small>
                           ) : null}
 
-                          <div className="ledger-form__footer">
+                                                    <div className="ledger-form__footer">
+                            <button
+                              className={
+                                selectedProfileId ===
+                                profile.id
+                                  ? "primary-button"
+                                  : "secondary-button"
+                              }
+                              type="button"
+                              disabled={
+                                actionKey !==
+                                null
+                              }
+                              onClick={() =>
+                                setSelectedProfileId(
+                                  profile.id,
+                                )
+                              }
+                            >
+                              {selectedProfileId ===
+                              profile.id
+                                ? "Rules selected"
+                                : "Manage rules"}
+                            </button>
+
                             {profile.is_active &&
                             !profile.is_default ? (
                               <button
@@ -926,6 +995,25 @@ export function TaxConfigurationWorkspace({
                 </button>
               </div>
             )}
+                        {selectedProfile ? (
+              <TaxRuleRegister
+                key={
+                  selectedProfile.id
+                }
+                profile={
+                  selectedProfile
+                }
+                reportCurrency={
+                  report.currency
+                }
+                reportPeriodStart={
+                  report.period_start
+                }
+                reportPeriodEnd={
+                  report.period_end
+                }
+              />
+            ) : null}
           </>
         ) : null}
       </section>

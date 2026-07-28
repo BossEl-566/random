@@ -4,6 +4,12 @@ import type {
   TaxProfileCreatePayload,
   TaxProfileListResponse,
   TaxProfileUpdatePayload,
+  TaxRule,
+  TaxRuleCreatePayload,
+  TaxRuleListResponse,
+  TaxRuleRetirePayload,
+  TaxRuleStatus,
+  TaxRuleUpdatePayload,
 } from "@/types/tax-configuration";
 
 export async function listTaxProfiles(
@@ -104,6 +110,100 @@ export async function reactivateTaxProfile(
     )}/reactivate`,
     {
       method: "POST",
+    },
+  );
+}
+
+export async function listTaxRules(
+  profileId: string,
+  ruleStatus?: TaxRuleStatus,
+): Promise<TaxRuleListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (ruleStatus) {
+    searchParameters.set(
+      "status",
+      ruleStatus,
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<TaxRuleListResponse>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/rules${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function getTaxRule(
+  ruleId: string,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}`,
+  );
+}
+
+export async function createTaxRule(
+  profileId: string,
+  payload: TaxRuleCreatePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/rules`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateTaxRule(
+  ruleId: string,
+  payload: TaxRuleUpdatePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function activateTaxRule(
+  ruleId: string,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}/activate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function retireTaxRule(
+  ruleId: string,
+  payload: TaxRuleRetirePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}/retire`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
     },
   );
 }
