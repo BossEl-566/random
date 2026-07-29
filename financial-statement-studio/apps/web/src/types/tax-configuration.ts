@@ -160,3 +160,81 @@ export type TaxRuleListResponse = {
 export type TaxRuleRetirePayload = {
   effective_to: string;
 };
+
+export type TaxDecimal =
+  | string
+  | number;
+
+export type TaxCalculationStatus =
+  | "draft"
+  | "confirmed";
+
+export type TaxCalculationPreviewPayload = {
+  tax_profile_id: string;
+  rule_code: string;
+  calculation_date: string;
+  tax_base: string;
+};
+
+export type TaxCalculationPreview = {
+  financial_report_id: string;
+  tax_profile_id: string;
+  tax_rule_id: string;
+
+  calculation_date: string;
+
+  rule_code: string;
+  rule_name: string;
+  tax_type: string;
+
+  calculation_method:
+    TaxCalculationMethod;
+
+  tax_base: TaxDecimal;
+  rate_applied: TaxDecimal | null;
+  fixed_amount_applied:
+    TaxDecimal | null;
+  tax_amount: TaxDecimal;
+
+  currency: string;
+  generated_at: string;
+};
+
+export type TaxCalculation = {
+  id: string;
+
+  financial_report_id: string;
+  tax_rule_id: string;
+
+  calculation_date: string;
+
+  tax_base: TaxDecimal;
+  tax_amount: TaxDecimal;
+  currency: string;
+
+  rule_code_snapshot: string;
+  rule_name_snapshot: string;
+  tax_type_snapshot: string;
+
+  calculation_method_snapshot:
+    TaxCalculationMethod;
+
+  rate_applied: TaxDecimal | null;
+  fixed_amount_applied:
+    TaxDecimal | null;
+
+  calculation_details_json:
+    string | null;
+
+  status: TaxCalculationStatus;
+  calculated_at: string;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaxCalculationListResponse = {
+  financial_report_id: string;
+  items: TaxCalculation[];
+  total: number;
+};

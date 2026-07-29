@@ -1,5 +1,9 @@
 import { apiRequest } from "@/lib/api";
 import type {
+  TaxCalculation,
+  TaxCalculationListResponse,
+  TaxCalculationPreview,
+  TaxCalculationPreviewPayload,
   TaxProfile,
   TaxProfileCreatePayload,
   TaxProfileListResponse,
@@ -205,5 +209,55 @@ export async function retireTaxRule(
       method: "POST",
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export async function previewTaxCalculation(
+  reportId: string,
+  payload: TaxCalculationPreviewPayload,
+): Promise<TaxCalculationPreview> {
+  return apiRequest<TaxCalculationPreview>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function createTaxCalculation(
+  reportId: string,
+  payload: TaxCalculationPreviewPayload,
+): Promise<TaxCalculation> {
+  return apiRequest<TaxCalculation>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listTaxCalculations(
+  reportId: string,
+): Promise<TaxCalculationListResponse> {
+  return apiRequest<TaxCalculationListResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations`,
+  );
+}
+
+export async function getTaxCalculation(
+  calculationId: string,
+): Promise<TaxCalculation> {
+  return apiRequest<TaxCalculation>(
+    `/api/tax-calculations/${encodeURIComponent(
+      calculationId,
+    )}`,
   );
 }

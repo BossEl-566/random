@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 
+import { TaxCalculationWorkspace } from "@/components/tax/tax-calculation-workspace";
 import { TaxProfileEditor } from "@/components/tax/tax-profile-editor";
 import { TaxRuleRegister } from "@/components/tax/tax-rule-register";
 import {
@@ -203,7 +204,7 @@ export function TaxConfigurationWorkspace({
 
           setSelectedProfileId(
             (currentProfileId) => {
-              if (
+                if (
                 currentProfileId &&
                 profileResponse.items.some(
                   (profile) =>
@@ -995,25 +996,41 @@ export function TaxConfigurationWorkspace({
                 </button>
               </div>
             )}
-                        {selectedProfile ? (
-              <TaxRuleRegister
-                key={
-                  selectedProfile.id
-                }
-                profile={
-                  selectedProfile
-                }
-                reportCurrency={
-                  report.currency
-                }
-                reportPeriodStart={
-                  report.period_start
-                }
-                reportPeriodEnd={
-                  report.period_end
-                }
-              />
-            ) : null}
+            {selectedProfile ? (
+  <>
+    <TaxRuleRegister
+      key={`rules-${selectedProfile.id}`}
+      profile={selectedProfile}
+      reportCurrency={
+        report.currency
+      }
+      reportPeriodStart={
+        report.period_start
+      }
+      reportPeriodEnd={
+        report.period_end
+      }
+    />
+
+    <TaxCalculationWorkspace
+      key={`calculations-${selectedProfile.id}`}
+      profile={selectedProfile}
+      reportId={report.id}
+      reportCurrency={
+        report.currency
+      }
+      reportPeriodStart={
+        report.period_start
+      }
+      reportPeriodEnd={
+        report.period_end
+      }
+      reportStatus={
+        report.status
+      }
+    />
+  </>
+) : null}
           </>
         ) : null}
       </section>
