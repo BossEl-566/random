@@ -10,6 +10,7 @@ import {
 import { TaxCalculationWorkspace } from "@/components/tax/tax-calculation-workspace";
 import { TaxProfileEditor } from "@/components/tax/tax-profile-editor";
 import { TaxRuleRegister } from "@/components/tax/tax-rule-register";
+import { TaxReconciliationWorkspace } from "@/components/tax/tax-reconciliation-workspace";
 import {
   getCompany,
 } from "@/lib/companies-api";
@@ -1016,6 +1017,23 @@ export function TaxConfigurationWorkspace({
       key={`calculations-${selectedProfile.id}`}
       profile={selectedProfile}
       reportId={report.id}
+      reportCurrency={
+        report.currency
+      }
+      reportPeriodStart={
+        report.period_start
+      }
+      reportPeriodEnd={
+        report.period_end
+      }
+      reportStatus={
+        report.status
+      }
+    />
+        <TaxReconciliationWorkspace
+      key={`reconciliation-${report.id}`}
+      reportId={report.id}
+      companyId={company.id}
       reportCurrency={
         report.currency
       }

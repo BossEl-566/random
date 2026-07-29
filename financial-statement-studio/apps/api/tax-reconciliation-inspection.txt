@@ -1,0 +1,981 @@
+===== TAX RECONCILIATION SCHEMAS =====
+665:class TaxReconciliationStatus(StrEnum):
+674:class PostTaxAdjustmentRequest(BaseModel):
+706:class TaxReconciliationResponse(BaseModel):
+736:class PostTaxAdjustmentResponse(BaseModel):
+
+===== TAX SCHEMA SECTION =====
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class TaxCalculationListResponse(
+    BaseModel,
+):
+    financial_report_id: str
+    items: list[TaxCalculationResponse]
+    total: int
+
+class TaxReconciliationStatus(StrEnum):
+    """Relationship between configured tax and ledger taxation."""
+
+    NOT_CONFIGURED = "not_configured"
+    RECONCILED = "reconciled"
+    UNDER_POSTED = "under_posted"
+    OVER_POSTED = "over_posted"
+
+
+class PostTaxAdjustmentRequest(BaseModel):
+    """
+    Details required to post the outstanding calculated tax.
+
+    The user explicitly selects the expense and liability accounts so
+    that the system never silently posts to an unintended account.
+    """
+
+    tax_expense_account_id: str = Field(
+        min_length=36,
+        max_length=36,
+    )
+
+    tax_payable_account_id: str = Field(
+        min_length=36,
+        max_length=36,
+    )
+
+    entry_date: date | None = None
+
+    reason: str = Field(
+        min_length=3,
+        max_length=2000,
+    )
+
+    acknowledge_existing_taxation: bool = False
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+
+class TaxReconciliationResponse(BaseModel):
+    """Comparison between tax calculations and posted taxation."""
+
+    financial_report_id: str
+    currency: str
+    as_of: date
+
+    profit_before_tax: Decimal
+
+    ledger_taxation: Decimal
+    configured_taxation: Decimal
+
+    confirmed_configured_taxation: Decimal
+    draft_configured_taxation: Decimal
+
+    difference: Decimal
+
+    ledger_profit_after_tax: Decimal
+    configured_profit_after_tax: Decimal
+
+    status: TaxReconciliationStatus
+    requires_attention: bool
+
+    calculations: list[
+        TaxCalculationResponse
+    ]
+
+    generated_at: datetime
+
+
+class PostTaxAdjustmentResponse(BaseModel):
+    """Journal and reconciliation returned after controlled posting."""
+
+    journal_entry: JournalEntryResponse
+
+    reconciliation: (
+        TaxReconciliationResponse
+    )
+
+===== TAX RECONCILIATION ROUTES =====
+554:        "/tax-reconciliation"
+583:        "/tax-reconciliation"
+584:        "/post-adjustment"
+
+===== TAX ROUTE SECTION =====
+                        " ",
+                        "-",
+                    )
+                ),
+                calculation_date=(
+                    calculation_date
+                ),
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.get(
+    "/tax-rules/{rule_id}",
+    response_model=TaxRuleResponse,
+)
+def get_tax_rule(
+    rule_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxRuleResponse:
+    try:
+        return (
+            tax_configuration_service
+            .get_rule(
+                database_session,
+                rule_id,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.patch(
+    "/tax-rules/{rule_id}",
+    response_model=TaxRuleResponse,
+)
+def update_tax_rule(
+    rule_id: str,
+    payload: TaxRuleUpdate,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxRuleResponse:
+    try:
+        return (
+            tax_configuration_service
+            .update_rule(
+                database_session,
+                rule_id=rule_id,
+                payload=payload,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.post(
+    "/tax-rules/{rule_id}/activate",
+    response_model=TaxRuleResponse,
+)
+def activate_tax_rule(
+    rule_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxRuleResponse:
+    try:
+        return (
+            tax_configuration_service
+            .activate_rule(
+                database_session,
+                rule_id,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.post(
+    "/tax-rules/{rule_id}/retire",
+    response_model=TaxRuleResponse,
+)
+def retire_tax_rule(
+    rule_id: str,
+    payload: TaxRuleRetireRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxRuleResponse:
+    try:
+        return (
+            tax_configuration_service
+            .retire_rule(
+                database_session,
+                rule_id=rule_id,
+                payload=payload,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.post(
+    (
+        "/financial-reports/{report_id}"
+        "/tax-calculations/preview"
+    ),
+    response_model=(
+        TaxCalculationPreviewResponse
+    ),
+)
+def preview_tax_calculation(
+    report_id: str,
+    payload:
+        TaxCalculationPreviewRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxCalculationPreviewResponse:
+    try:
+        return (
+            tax_configuration_service
+            .calculate_preview(
+                database_session,
+                report_id=report_id,
+                payload=payload,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.post(
+    (
+        "/financial-reports/{report_id}"
+        "/tax-calculations"
+    ),
+    response_model=TaxCalculationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_tax_calculation(
+    report_id: str,
+    payload:
+        TaxCalculationPreviewRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxCalculationResponse:
+    try:
+        return (
+            tax_configuration_service
+            .create_calculation(
+                database_session,
+                report_id=report_id,
+                payload=payload,
+            )
+        )
+    except TaxConfigurationServiceError as error:
+        raise_tax_http_error(error)
+
+
+@router.get(
+    (
+        "/financial-reports/{report_id}"
+        "/tax-calculations"
+    ),
+    response_model=(
+        TaxCalculationListResponse
+    ),
+)
+def list_tax_calculations(
+    report_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> TaxCalculationListResponse:
+    try:
+
+===== TAX SERVICE RECONCILIATION METHODS =====
+1445:    def get_reconciliation(
+1712:    def post_tax_adjustment(
+
+===== TAX SERVICE SECTION =====
+                for rule in rules
+            ],
+            total=len(rules),
+        )
+
+    def get_rule(
+        self,
+        database_session: Session,
+        rule_id: str,
+    ) -> TaxRuleResponse:
+        rule = self.require_rule(
+            database_session,
+            rule_id,
+        )
+
+        return TaxRuleResponse.model_validate(
+            rule,
+        )
+
+    def update_rule(
+        self,
+        database_session: Session,
+        *,
+        rule_id: str,
+        payload: TaxRuleUpdate,
+    ) -> TaxRuleResponse:
+        rule = self.require_rule(
+            database_session,
+            rule_id,
+        )
+
+        values = payload.model_dump(
+            exclude_unset=True,
+        )
+
+        if not values:
+            raise TaxConfigurationValidationError(
+                "Provide at least one tax-rule field to update.",
+            )
+
+        if (
+            rule.status
+            == TaxRuleStatus.RETIRED.value
+        ):
+            raise TaxConfigurationConflictError(
+                "A retired tax rule cannot be edited.",
+            )
+
+        if (
+            rule.status
+            == TaxRuleStatus.ACTIVE.value
+        ):
+            prohibited_fields = (
+                set(values)
+                - ACTIVE_RULE_EDITABLE_FIELDS
+            )
+
+            if prohibited_fields:
+                raise TaxConfigurationConflictError(
+                    (
+                        "Active tax-rate configuration "
+                        "cannot be changed. Retire the "
+                        "rule and create a new effective "
+                        "version instead."
+                    ),
+                )
+
+        proposed_method = (
+            values.get(
+                "calculation_method",
+                rule.calculation_method,
+            )
+        )
+
+        if isinstance(
+            proposed_method,
+            TaxCalculationMethod,
+        ):
+            proposed_method = (
+                proposed_method.value
+            )
+
+        proposed_rate = values.get(
+            "rate_percentage",
+            rule.rate_percentage,
+        )
+
+        proposed_fixed_amount = (
+            values.get(
+                "fixed_amount",
+                rule.fixed_amount,
+            )
+        )
+
+        proposed_effective_from = (
+            values.get(
+                "effective_from",
+                rule.effective_from,
+            )
+        )
+
+        proposed_effective_to = (
+            values.get(
+                "effective_to",
+                rule.effective_to,
+            )
+        )
+
+        proposed_rule_code = (
+            values.get(
+                "rule_code",
+                rule.rule_code,
+            )
+        )
+
+        self.validate_rule_values(
+            calculation_method=(
+                str(proposed_method)
+            ),
+            rate_percentage=(
+                proposed_rate
+            ),
+            fixed_amount=(
+                proposed_fixed_amount
+            ),
+            effective_from=(
+                proposed_effective_from
+            ),
+            effective_to=(
+                proposed_effective_to
+            ),
+        )
+
+        self.ensure_no_overlap(
+            database_session,
+            profile_id=(
+                rule.tax_profile_id
+            ),
+            rule_code=(
+                str(proposed_rule_code)
+            ),
+            effective_from=(
+                proposed_effective_from
+            ),
+            effective_to=(
+                proposed_effective_to
+            ),
+            exclude_rule_id=rule.id,
+        )
+
+        for field_name, value in values.items():
+            if isinstance(
+                value,
+                TaxCalculationMethod,
+            ):
+                value = value.value
+
+            setattr(
+                rule,
+                field_name,
+                value,
+            )
+
+        self.commit(
+            database_session,
+            (
+                "The tax-rule update conflicts "
+                "with an existing rule."
+            ),
+        )
+
+        database_session.refresh(rule)
+
+        return TaxRuleResponse.model_validate(
+            rule,
+        )
+
+    def activate_rule(
+        self,
+        database_session: Session,
+        rule_id: str,
+    ) -> TaxRuleResponse:
+        rule = self.require_rule(
+            database_session,
+            rule_id,
+        )
+
+        profile = self.require_profile(
+            database_session,
+            rule.tax_profile_id,
+        )
+
+        self.ensure_profile_active(
+            profile,
+        )
+
+        if (
+            rule.status
+            == TaxRuleStatus.ACTIVE.value
+        ):
+            return TaxRuleResponse.model_validate(
+                rule,
+            )
+
+        if (
+            rule.status
+            == TaxRuleStatus.RETIRED.value
+        ):
+            raise TaxConfigurationConflictError(
+                "A retired tax rule cannot be reactivated.",
+            )
+
+        self.ensure_no_overlap(
+            database_session,
+            profile_id=(
+                rule.tax_profile_id
+            ),
+            rule_code=rule.rule_code,
+            effective_from=(
+                rule.effective_from
+            ),
+            effective_to=(
+                rule.effective_to
+            ),
+            exclude_rule_id=rule.id,
+        )
+
+        rule.status = (
+            TaxRuleStatus.ACTIVE.value
+        )
+
+        self.commit(
+            database_session,
+            "The tax rule could not be activated.",
+        )
+
+        database_session.refresh(rule)
+
+        return TaxRuleResponse.model_validate(
+            rule,
+        )
+
+    def retire_rule(
+        self,
+        database_session: Session,
+        *,
+        rule_id: str,
+        payload: TaxRuleRetireRequest,
+    ) -> TaxRuleResponse:
+        rule = self.require_rule(
+            database_session,
+            rule_id,
+        )
+
+        if (
+            rule.status
+            == TaxRuleStatus.RETIRED.value
+        ):
+            return TaxRuleResponse.model_validate(
+                rule,
+            )
+
+        if (
+            rule.status
+            != TaxRuleStatus.ACTIVE.value
+        ):
+            raise TaxConfigurationConflictError(
+                "Only an active tax rule can be retired.",
+            )
+
+        if (
+            payload.effective_to
+            < rule.effective_from
+        ):
+            raise TaxConfigurationValidationError(
+                "Retirement date cannot be before the rule's effective start date.",
+            )
+
+        rule.effective_to = (
+            payload.effective_to
+        )
+
+        rule.status = (
+            TaxRuleStatus.RETIRED.value
+        )
+
+        self.commit(
+            database_session,
+            "The tax rule could not be retired.",
+        )
+
+        database_session.refresh(rule)
+
+        return TaxRuleResponse.model_validate(
+            rule,
+        )
+
+    def get_effective_rule(
+        self,
+        database_session: Session,
+        *,
+        profile_id: str,
+        rule_code: str,
+        calculation_date: date,
+    ) -> TaxRuleResponse:
+        profile = self.require_profile(
+            database_session,
+            profile_id,
+        )
+
+        self.ensure_profile_active(
+            profile,
+        )
+
+        rule = (
+            self.repository
+            .find_effective_rule(
+                database_session,
+                profile_id=profile.id,
+                rule_code=rule_code,
+                calculation_date=(
+                    calculation_date
+                ),
+            )
+        )
+
+        if rule is None:
+            raise TaxConfigurationNotFoundError(
+                (
+                    f"No effective rule {rule_code} "
+                    f"was found for "
+                    f"{calculation_date}."
+                ),
+            )
+
+        return TaxRuleResponse.model_validate(
+            rule,
+        )
+
+    def calculate_preview(
+        self,
+        database_session: Session,
+        *,
+        report_id: str,
+        payload:
+            TaxCalculationPreviewRequest,
+    ) -> TaxCalculationPreviewResponse:
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        profile = self.require_profile(
+            database_session,
+            payload.tax_profile_id,
+        )
+
+        self.ensure_profile_active(
+            profile,
+        )
+
+        if (
+            profile.company_id
+            != report.company_id
+        ):
+            raise TaxConfigurationValidationError(
+                "The tax profile must belong to the report company.",
+            )
+
+        calculation_date = (
+            payload.calculation_date
+            or report.period_end
+        )
+
+        if not (
+            report.period_start
+            <= calculation_date
+            <= report.period_end
+        ):
+            raise TaxConfigurationValidationError(
+                "Tax calculation date must fall within the report period.",
+            )
+
+        rule = (
+            self.repository
+            .find_effective_rule(
+                database_session,
+                profile_id=profile.id,
+                rule_code=(
+                    payload.rule_code
+                ),
+                calculation_date=(
+                    calculation_date
+                ),
+            )
+        )
+
+        if rule is None:
+            raise TaxConfigurationNotFoundError(
+                (
+                    f"No effective rule "
+                    f"{payload.rule_code} "
+                    f"was found for "
+                    f"{calculation_date}."
+                ),
+            )
+
+        rate_applied: Decimal | None = None
+        fixed_amount_applied: Decimal | None = None
+
+        if (
+            rule.calculation_method
+            == TaxCalculationMethod
+            .PERCENTAGE
+            .value
+        ):
+            if rule.rate_percentage is None:
+                raise TaxConfigurationPersistenceError(
+                    "The effective percentage rule has no rate.",
+                )
+
+===== TAX RECONCILIATION TESTS =====
+943:def test_tax_reconciliation_reports_outstanding_difference(
+994:def test_existing_manual_tax_requires_acknowledgement(
+1036:def test_tax_adjustment_posts_only_difference(
+1156:def test_over_posted_tax_is_not_reversed_automatically(
+
+===== TAX TEST SECTION =====
+    assert response.status_code == 200
+
+    reconciliation = response.json()
+
+    assert Decimal(
+        reconciliation[
+            "configured_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation[
+            "ledger_taxation"
+        ],
+    ) == Decimal("100.00")
+
+    assert Decimal(
+        reconciliation["difference"],
+    ) == Decimal("150.00")
+
+    assert (
+        reconciliation["status"]
+        == "under_posted"
+    )
+
+    assert (
+        reconciliation[
+            "requires_attention"
+        ]
+        is True
+    )
+
+
+def test_existing_manual_tax_requires_acknowledgement(
+    client: TestClient,
+) -> None:
+    report, _calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="100.00",
+        )
+    )
+
+    response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Post the outstanding "
+                "configured income tax."
+            ),
+            "acknowledge_existing_taxation":
+                False,
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_tax_adjustment_posts_only_difference(
+    client: TestClient,
+) -> None:
+    report, calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="100.00",
+        )
+    )
+
+    response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Post only the difference "
+                "after reviewing the manual "
+                "tax provision."
+            ),
+            "acknowledge_existing_taxation":
+                True,
+        },
+    )
+
+    assert response.status_code == 201
+
+    payload = response.json()
+
+    assert Decimal(
+        payload[
+            "journal_entry"
+        ]["total_debit"],
+    ) == Decimal("150.00")
+
+    assert Decimal(
+        payload[
+            "journal_entry"
+        ]["total_credit"],
+    ) == Decimal("150.00")
+
+    reconciliation = payload[
+        "reconciliation"
+    ]
+
+    assert Decimal(
+        reconciliation[
+            "ledger_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation[
+            "configured_taxation"
+        ],
+    ) == Decimal("250.00")
+
+    assert Decimal(
+        reconciliation["difference"],
+    ) == Decimal("0.00")
+
+    assert (
+        reconciliation["status"]
+        == "reconciled"
+    )
+
+    calculation_response = client.get(
+        (
+            "/api/tax-calculations/"
+            f"{calculation['id']}"
+        ),
+    )
+
+    assert (
+        calculation_response.status_code
+        == 200
+    )
+
+    assert (
+        calculation_response.json()[
+            "status"
+        ]
+        == "confirmed"
+    )
+
+    statement_response = client.get(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/statements/profit-or-loss"
+        ),
+    )
+
+    assert (
+        statement_response.status_code
+        == 200
+    )
+
+    assert Decimal(
+        statement_response.json()[
+            "taxation"
+        ],
+    ) == Decimal("250.00")
+
+
+def test_over_posted_tax_is_not_reversed_automatically(
+    client: TestClient,
+) -> None:
+    report, _calculation, _profile, accounts = (
+        prepare_tax_reconciliation_scenario(
+            client,
+            manual_taxation="300.00",
+        )
+    )
+
+    reconciliation_response = client.get(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+        ),
+    )
+
+    assert (
+        reconciliation_response.status_code
+        == 200
+    )
+
+    assert (
+        reconciliation_response.json()[
+            "status"
+        ]
+        == "over_posted"
+    )
+
+    assert Decimal(
+        reconciliation_response.json()[
+            "difference"
+        ],
+    ) == Decimal("-50.00")
+
+    posting_response = client.post(
+        (
+            "/api/financial-reports/"
+            f"{report['id']}"
+            "/tax-reconciliation"
+            "/post-adjustment"
+        ),
+        json={
+            "tax_expense_account_id": (
+                accounts[
+                    "Income Tax Expense"
+                ]["id"]
+            ),
+            "tax_payable_account_id": (
+                accounts[
+                    "Tax Payable"
+                ]["id"]
+            ),
+            "entry_date":
+                "2025-12-31",
+            "reason": (
+                "Attempt automatic reversal."
+            ),
+            "acknowledge_existing_taxation":
+                True,
+        },
+    )
+
+    assert posting_response.status_code == 409

@@ -1,3 +1,6 @@
+import type {
+  JournalEntry,
+} from "@/types/journal-entry";
 export type TaxCalculationMethod =
   | "percentage"
   | "fixed_amount";
@@ -237,4 +240,59 @@ export type TaxCalculationListResponse = {
   financial_report_id: string;
   items: TaxCalculation[];
   total: number;
+};
+
+export type TaxReconciliationStatus =
+  | "not_configured"
+  | "reconciled"
+  | "under_posted"
+  | "over_posted";
+
+export type TaxReconciliation = {
+  financial_report_id: string;
+  currency: string;
+  as_of: string;
+
+  profit_before_tax: TaxDecimal;
+
+  ledger_taxation: TaxDecimal;
+  configured_taxation: TaxDecimal;
+
+  confirmed_configured_taxation:
+    TaxDecimal;
+
+  draft_configured_taxation:
+    TaxDecimal;
+
+  difference: TaxDecimal;
+
+  ledger_profit_after_tax:
+    TaxDecimal;
+
+  configured_profit_after_tax:
+    TaxDecimal;
+
+  status: TaxReconciliationStatus;
+  requires_attention: boolean;
+
+  calculations: TaxCalculation[];
+
+  generated_at: string;
+};
+
+export type PostTaxAdjustmentPayload = {
+  tax_expense_account_id: string;
+  tax_payable_account_id: string;
+
+  entry_date: string | null;
+
+  reason: string;
+
+  acknowledge_existing_taxation:
+    boolean;
+};
+
+export type PostTaxAdjustmentResponse = {
+  journal_entry: JournalEntry;
+  reconciliation: TaxReconciliation;
 };

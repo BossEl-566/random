@@ -1,3 +1,509 @@
+===== CURRENT TAX TYPES =====
+export type TaxCalculationMethod =
+  | "percentage"
+  | "fixed_amount";
+
+export type TaxRuleStatus =
+  | "draft"
+  | "active"
+  | "retired";
+
+export const TAX_CALCULATION_METHOD_OPTIONS = [
+  {
+    value: "percentage",
+    label: "Percentage of tax base",
+  },
+  {
+    value: "fixed_amount",
+    label: "Fixed amount",
+  },
+] as const;
+
+export const TAX_RULE_STATUS_OPTIONS = [
+  {
+    value: "draft",
+    label: "Draft",
+  },
+  {
+    value: "active",
+    label: "Active",
+  },
+  {
+    value: "retired",
+    label: "Retired",
+  },
+] as const;
+
+export type TaxProfile = {
+  id: string;
+  company_id: string;
+
+  profile_code: string;
+  profile_name: string;
+
+  jurisdiction_country_code: string;
+  jurisdiction_name: string;
+
+  tax_identifier: string | null;
+  taxpayer_category: string | null;
+  description: string | null;
+
+  is_default: boolean;
+  is_active: boolean;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaxProfileCreatePayload = {
+  company_id: string;
+
+  profile_code: string;
+  profile_name: string;
+
+  jurisdiction_country_code?: string;
+  jurisdiction_name?: string;
+
+  tax_identifier?: string | null;
+  taxpayer_category?: string | null;
+  description?: string | null;
+
+  is_default?: boolean;
+  is_active?: boolean;
+};
+
+export type TaxProfileUpdatePayload = {
+  profile_code?: string;
+  profile_name?: string;
+
+  jurisdiction_country_code?: string;
+  jurisdiction_name?: string;
+
+  tax_identifier?: string | null;
+  taxpayer_category?: string | null;
+  description?: string | null;
+};
+
+export type TaxProfileListResponse = {
+  company_id: string;
+  items: TaxProfile[];
+  total: number;
+};
+
+export type TaxRule = {
+  id: string;
+  tax_profile_id: string;
+
+  rule_code: string;
+  rule_name: string;
+  tax_type: string;
+
+  calculation_method:
+    TaxCalculationMethod;
+
+  rate_percentage: string | null;
+  fixed_amount: string | null;
+
+  currency: string;
+
+  effective_from: string;
+  effective_to: string | null;
+
+  taxpayer_category: string | null;
+  business_activity: string | null;
+
+  status: TaxRuleStatus;
+
+  source_reference: string | null;
+  notes: string | null;
+
+  is_system_rule: boolean;
+  display_order: number;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaxRuleCreatePayload = {
+  rule_code: string;
+  rule_name: string;
+  tax_type: string;
+
+  calculation_method:
+    TaxCalculationMethod;
+
+  rate_percentage: string | null;
+  fixed_amount: string | null;
+
+  currency: string;
+
+  effective_from: string;
+  effective_to?: string | null;
+
+  taxpayer_category?: string | null;
+  business_activity?: string | null;
+
+  source_reference?: string | null;
+  notes?: string | null;
+
+  display_order?: number;
+};
+
+export type TaxRuleUpdatePayload =
+  Partial<TaxRuleCreatePayload>;
+
+export type TaxRuleListResponse = {
+  tax_profile_id: string;
+  items: TaxRule[];
+  total: number;
+};
+
+export type TaxRuleRetirePayload = {
+  effective_to: string;
+};
+
+export type TaxDecimal =
+  | string
+  | number;
+
+export type TaxCalculationStatus =
+  | "draft"
+  | "confirmed";
+
+export type TaxCalculationPreviewPayload = {
+  tax_profile_id: string;
+  rule_code: string;
+  calculation_date: string;
+  tax_base: string;
+};
+
+export type TaxCalculationPreview = {
+  financial_report_id: string;
+  tax_profile_id: string;
+  tax_rule_id: string;
+
+  calculation_date: string;
+
+  rule_code: string;
+  rule_name: string;
+  tax_type: string;
+
+  calculation_method:
+    TaxCalculationMethod;
+
+  tax_base: TaxDecimal;
+  rate_applied: TaxDecimal | null;
+  fixed_amount_applied:
+    TaxDecimal | null;
+  tax_amount: TaxDecimal;
+
+  currency: string;
+  generated_at: string;
+};
+
+export type TaxCalculation = {
+  id: string;
+
+  financial_report_id: string;
+  tax_rule_id: string;
+
+  calculation_date: string;
+
+  tax_base: TaxDecimal;
+  tax_amount: TaxDecimal;
+  currency: string;
+
+  rule_code_snapshot: string;
+  rule_name_snapshot: string;
+  tax_type_snapshot: string;
+
+  calculation_method_snapshot:
+    TaxCalculationMethod;
+
+  rate_applied: TaxDecimal | null;
+  fixed_amount_applied:
+    TaxDecimal | null;
+
+  calculation_details_json:
+    string | null;
+
+  status: TaxCalculationStatus;
+  calculated_at: string;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaxCalculationListResponse = {
+  financial_report_id: string;
+  items: TaxCalculation[];
+  total: number;
+};
+===== CURRENT TAX API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  TaxCalculation,
+  TaxCalculationListResponse,
+  TaxCalculationPreview,
+  TaxCalculationPreviewPayload,
+  TaxProfile,
+  TaxProfileCreatePayload,
+  TaxProfileListResponse,
+  TaxProfileUpdatePayload,
+  TaxRule,
+  TaxRuleCreatePayload,
+  TaxRuleListResponse,
+  TaxRuleRetirePayload,
+  TaxRuleStatus,
+  TaxRuleUpdatePayload,
+} from "@/types/tax-configuration";
+
+export async function listTaxProfiles(
+  companyId: string,
+  includeInactive = false,
+): Promise<TaxProfileListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (includeInactive) {
+    searchParameters.set(
+      "include_inactive",
+      "true",
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<TaxProfileListResponse>(
+    `/api/companies/${encodeURIComponent(
+      companyId,
+    )}/tax-profiles${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function getTaxProfile(
+  profileId: string,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}`,
+  );
+}
+
+export async function createTaxProfile(
+  payload: TaxProfileCreatePayload,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    "/api/tax-profiles",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateTaxProfile(
+  profileId: string,
+  payload: TaxProfileUpdatePayload,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function setDefaultTaxProfile(
+  profileId: string,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/set-default`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function deactivateTaxProfile(
+  profileId: string,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/deactivate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function reactivateTaxProfile(
+  profileId: string,
+): Promise<TaxProfile> {
+  return apiRequest<TaxProfile>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/reactivate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function listTaxRules(
+  profileId: string,
+  ruleStatus?: TaxRuleStatus,
+): Promise<TaxRuleListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (ruleStatus) {
+    searchParameters.set(
+      "status",
+      ruleStatus,
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<TaxRuleListResponse>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/rules${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function getTaxRule(
+  ruleId: string,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}`,
+  );
+}
+
+export async function createTaxRule(
+  profileId: string,
+  payload: TaxRuleCreatePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-profiles/${encodeURIComponent(
+      profileId,
+    )}/rules`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateTaxRule(
+  ruleId: string,
+  payload: TaxRuleUpdatePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function activateTaxRule(
+  ruleId: string,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}/activate`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function retireTaxRule(
+  ruleId: string,
+  payload: TaxRuleRetirePayload,
+): Promise<TaxRule> {
+  return apiRequest<TaxRule>(
+    `/api/tax-rules/${encodeURIComponent(
+      ruleId,
+    )}/retire`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function previewTaxCalculation(
+  reportId: string,
+  payload: TaxCalculationPreviewPayload,
+): Promise<TaxCalculationPreview> {
+  return apiRequest<TaxCalculationPreview>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations/preview`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function createTaxCalculation(
+  reportId: string,
+  payload: TaxCalculationPreviewPayload,
+): Promise<TaxCalculation> {
+  return apiRequest<TaxCalculation>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function listTaxCalculations(
+  reportId: string,
+): Promise<TaxCalculationListResponse> {
+  return apiRequest<TaxCalculationListResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-calculations`,
+  );
+}
+
+export async function getTaxCalculation(
+  calculationId: string,
+): Promise<TaxCalculation> {
+  return apiRequest<TaxCalculation>(
+    `/api/tax-calculations/${encodeURIComponent(
+      calculationId,
+    )}`,
+  );
+}
+===== CURRENT CALCULATION WORKSPACE =====
 "use client";
 
 import {
@@ -581,33 +1087,6 @@ export function TaxCalculationWorkspace({
       setIsRecording(false);
     }
   }
-
-    useEffect(() => {
-    function handleTaxCalculationsUpdated(): void {
-      setResourceState(
-        "loading",
-      );
-
-      setLoadError(null);
-
-      setReloadVersion(
-        (currentVersion) =>
-          currentVersion + 1,
-      );
-    }
-
-    window.addEventListener(
-      "tax-calculations-updated",
-      handleTaxCalculationsUpdated,
-    );
-
-    return () => {
-      window.removeEventListener(
-        "tax-calculations-updated",
-        handleTaxCalculationsUpdated,
-      );
-    };
-  }, []);
 
   return (
     <section className="version-history-panel">
@@ -1210,5 +1689,408 @@ export function TaxCalculationWorkspace({
         </>
       ) : null}
     </section>
+  );
+}
+===== LEDGER ACCOUNT TYPES =====
+export const ACCOUNT_TYPE_OPTIONS = [
+  {
+    value: "asset",
+    label: "Assets",
+  },
+  {
+    value: "liability",
+    label: "Liabilities",
+  },
+  {
+    value: "equity",
+    label: "Equity",
+  },
+  {
+    value: "revenue",
+    label: "Revenue and income",
+  },
+  {
+    value: "expense",
+    label: "Expenses",
+  },
+] as const;
+
+export const REPORT_CATEGORY_OPTIONS = [
+  {
+    value: "revenue",
+    label: "Revenue",
+  },
+  {
+    value: "cost_of_sales",
+    label: "Cost of sales",
+  },
+  {
+    value: "direct_service_costs",
+    label: "Direct service costs",
+  },
+  {
+    value: "manufacturing_costs",
+    label: "Manufacturing costs",
+  },
+  {
+    value: "other_income",
+    label: "Other income",
+  },
+  {
+    value: "administrative_expenses",
+    label: "Administrative expenses",
+  },
+  {
+    value: "selling_distribution_expenses",
+    label: "Selling and distribution expenses",
+  },
+  {
+    value: "finance_costs",
+    label: "Finance costs",
+  },
+  {
+    value: "taxation",
+    label: "Taxation",
+  },
+  {
+    value: "current_assets",
+    label: "Current assets",
+  },
+  {
+    value: "non_current_assets",
+    label: "Non-current assets",
+  },
+  {
+    value: "current_liabilities",
+    label: "Current liabilities",
+  },
+  {
+    value: "non_current_liabilities",
+    label: "Non-current liabilities",
+  },
+  {
+    value: "equity",
+    label: "Equity",
+  },
+] as const;
+
+export const CASH_FLOW_CATEGORY_OPTIONS = [
+  {
+    value: "operating",
+    label: "Operating activity",
+  },
+  {
+    value: "investing",
+    label: "Investing activity",
+  },
+  {
+    value: "financing",
+    label: "Financing activity",
+  },
+  {
+    value: "non_cash",
+    label: "Non-cash item",
+  },
+  {
+    value: "not_applicable",
+    label: "Not applicable",
+  },
+] as const;
+
+export const NORMAL_BALANCE_OPTIONS = [
+  {
+    value: "debit",
+    label: "Debit",
+  },
+  {
+    value: "credit",
+    label: "Credit",
+  },
+] as const;
+
+export type AccountType =
+  (typeof ACCOUNT_TYPE_OPTIONS)[number]["value"];
+
+export type ReportCategory =
+  (typeof REPORT_CATEGORY_OPTIONS)[number]["value"];
+
+export type CashFlowCategory =
+  (typeof CASH_FLOW_CATEGORY_OPTIONS)[number]["value"];
+
+export type NormalBalance =
+  (typeof NORMAL_BALANCE_OPTIONS)[number]["value"];
+
+export const REPORT_CATEGORY_ACCOUNT_TYPE: Record<
+  ReportCategory,
+  AccountType
+> = {
+  revenue: "revenue",
+  other_income: "revenue",
+
+  cost_of_sales: "expense",
+  direct_service_costs: "expense",
+  manufacturing_costs: "expense",
+  administrative_expenses: "expense",
+  selling_distribution_expenses: "expense",
+  finance_costs: "expense",
+  taxation: "expense",
+
+  current_assets: "asset",
+  non_current_assets: "asset",
+
+  current_liabilities: "liability",
+  non_current_liabilities: "liability",
+
+  equity: "equity",
+};
+
+export const ACCOUNT_TYPE_DEFAULT_NORMAL_BALANCE: Record<
+  AccountType,
+  NormalBalance
+> = {
+  asset: "debit",
+  expense: "debit",
+  liability: "credit",
+  equity: "credit",
+  revenue: "credit",
+};
+
+export type LedgerAccount = {
+  id: string;
+  company_id: string;
+  parent_account_id: string | null;
+
+  account_code: string;
+  account_name: string;
+
+  account_type: AccountType;
+  report_category: ReportCategory;
+  cash_flow_category: CashFlowCategory | null;
+  normal_balance: NormalBalance;
+
+  description: string | null;
+
+  is_system_account: boolean;
+  is_cash_equivalent: boolean;
+  is_active: boolean;
+  display_order: number;
+
+  created_at: string;
+  updated_at: string;
+};
+
+export type LedgerAccountListResponse = {
+  items: LedgerAccount[];
+  total: number;
+  offset: number;
+  limit: number;
+};
+
+export type ChartInitializationResponse = {
+  company_id: string;
+  business_template: string;
+  created_count: number;
+  skipped_count: number;
+  items: LedgerAccount[];
+};
+
+export type LedgerAccountCreatePayload = {
+  account_code: string;
+  account_name: string;
+  account_type: AccountType;
+  report_category: ReportCategory;
+  cash_flow_category?: CashFlowCategory | null;
+  is_cash_equivalent?: boolean;
+  normal_balance: NormalBalance;
+  parent_account_id?: string | null;
+  description?: string | null;
+  display_order: number;
+};
+
+export type LedgerAccountUpdatePayload = Partial<
+  LedgerAccountCreatePayload
+>;
+
+export type LedgerAccountListQuery = {
+  search?: string;
+  accountType?: AccountType;
+  reportCategory?: ReportCategory;
+  includeInactive?: boolean;
+  offset?: number;
+  limit?: number;
+};
+===== JOURNAL TYPES =====
+
+===== JOURNAL API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  JournalEntry,
+  JournalEntryCreatePayload,
+  JournalEntryListQuery,
+  JournalEntryListResponse,
+  JournalEntryUpdatePayload,
+  JournalEntryVoidPayload,
+  TrialBalance,
+} from "@/types/journal-entry";
+
+export async function listJournalEntries(
+  reportId: string,
+  query: JournalEntryListQuery = {},
+): Promise<JournalEntryListResponse> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (query.search) {
+    searchParameters.set(
+      "search",
+      query.search,
+    );
+  }
+
+  if (query.status) {
+    searchParameters.set(
+      "status",
+      query.status,
+    );
+  }
+
+  if (query.entryType) {
+    searchParameters.set(
+      "entry_type",
+      query.entryType,
+    );
+  }
+
+  if (query.dateFrom) {
+    searchParameters.set(
+      "date_from",
+      query.dateFrom,
+    );
+  }
+
+  if (query.dateTo) {
+    searchParameters.set(
+      "date_to",
+      query.dateTo,
+    );
+  }
+
+  if (query.offset !== undefined) {
+    searchParameters.set(
+      "offset",
+      String(query.offset),
+    );
+  }
+
+  if (query.limit !== undefined) {
+    searchParameters.set(
+      "limit",
+      String(query.limit),
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<JournalEntryListResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/journal-entries${
+      queryString ? `?${queryString}` : ""
+    }`,
+  );
+}
+
+export async function getJournalEntry(
+  entryId: string,
+): Promise<JournalEntry> {
+  return apiRequest<JournalEntry>(
+    `/api/journal-entries/${encodeURIComponent(
+      entryId,
+    )}`,
+  );
+}
+
+export async function createJournalEntry(
+  reportId: string,
+  payload: JournalEntryCreatePayload,
+): Promise<JournalEntry> {
+  return apiRequest<JournalEntry>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/journal-entries`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function updateJournalEntry(
+  entryId: string,
+  payload: JournalEntryUpdatePayload,
+): Promise<JournalEntry> {
+  return apiRequest<JournalEntry>(
+    `/api/journal-entries/${encodeURIComponent(
+      entryId,
+    )}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function postJournalEntry(
+  entryId: string,
+): Promise<JournalEntry> {
+  return apiRequest<JournalEntry>(
+    `/api/journal-entries/${encodeURIComponent(
+      entryId,
+    )}/post`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function voidJournalEntry(
+  entryId: string,
+  payload: JournalEntryVoidPayload,
+): Promise<JournalEntry> {
+  return apiRequest<JournalEntry>(
+    `/api/journal-entries/${encodeURIComponent(
+      entryId,
+    )}/void`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function getTrialBalance(
+  reportId: string,
+  asOf?: string,
+): Promise<TrialBalance> {
+  const searchParameters =
+    new URLSearchParams();
+
+  if (asOf) {
+    searchParameters.set(
+      "as_of",
+      asOf,
+    );
+  }
+
+  const queryString =
+    searchParameters.toString();
+
+  return apiRequest<TrialBalance>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/trial-balance${
+      queryString ? `?${queryString}` : ""
+    }`,
   );
 }

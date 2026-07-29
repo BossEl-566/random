@@ -1,5 +1,8 @@
 import { apiRequest } from "@/lib/api";
 import type {
+  PostTaxAdjustmentPayload,
+  PostTaxAdjustmentResponse,
+  TaxReconciliation,
   TaxCalculation,
   TaxCalculationListResponse,
   TaxCalculationPreview,
@@ -259,5 +262,30 @@ export async function getTaxCalculation(
     `/api/tax-calculations/${encodeURIComponent(
       calculationId,
     )}`,
+  );
+}
+
+export async function getTaxReconciliation(
+  reportId: string,
+): Promise<TaxReconciliation> {
+  return apiRequest<TaxReconciliation>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-reconciliation`,
+  );
+}
+
+export async function postTaxAdjustment(
+  reportId: string,
+  payload: PostTaxAdjustmentPayload,
+): Promise<PostTaxAdjustmentResponse> {
+  return apiRequest<PostTaxAdjustmentResponse>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/tax-reconciliation/post-adjustment`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
   );
 }
