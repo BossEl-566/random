@@ -8,6 +8,8 @@ import {
 
 import type {
   FinancialReportVersionDetail,
+  FinalisationTaxCalculationSnapshot,
+  SnapshotDecimal,
 } from "@/types/report-finalisation";
 
 type VerificationState =
@@ -25,15 +27,115 @@ type VersionDetailDialogProps = {
 function formatDateTime(
   value: string,
 ): string {
+  const date = new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return value;
+  }
+
   return new Intl.DateTimeFormat(
-    "en-US",
+    "en-GH",
     {
       dateStyle: "medium",
       timeStyle: "short",
     },
-  ).format(
-    new Date(value),
+  ).format(date);
+}
+
+function formatDate(
+  value: string,
+): string {
+  const date = new Date(
+    `${value}T00:00:00`,
   );
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GH",
+    {
+      dateStyle: "medium",
+    },
+  ).format(date);
+}
+
+function formatMoney(
+  value: SnapshotDecimal,
+  currency: string,
+): string {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return `${currency} ${String(
+      value,
+    )}`;
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      "en-GH",
+      {
+        style: "currency",
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      },
+    ).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(
+      2,
+    )}`;
+  }
+}
+
+function formatStatus(
+  value: string,
+): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(
+      /\b\w/g,
+      (letter) =>
+        letter.toUpperCase(),
+    );
+}
+
+function formatTaxMethod(
+  calculation:
+    FinalisationTaxCalculationSnapshot,
+): string {
+  if (
+    calculation
+      .calculation_method_snapshot ===
+    "percentage"
+  ) {
+    const rate = Number(
+      calculation.rate_applied ??
+        0,
+    );
+
+    return Number.isFinite(rate)
+      ? `${rate.toFixed(2)}% of tax base`
+      : `${String(
+          calculation.rate_applied,
+        )}% of tax base`;
+  }
+
+  return `Fixed amount: ${formatMoney(
+    calculation.fixed_amount_applied ??
+      0,
+    calculation.currency,
+  )}`;
 }
 
 function bytesToHex(
@@ -130,6 +232,14 @@ export function VersionDetailDialog({
         ),
       [version.snapshot],
     );
+
+  const taxCalculations =
+    version.snapshot
+      .tax_calculations ?? [];
+
+  const taxReconciliation =
+    version.snapshot
+      .tax_reconciliation ?? null;
 
   const verificationLabel = {
     checking:
@@ -242,10 +352,290 @@ export function VersionDetailDialog({
           </section>
         ) : null}
 
+        <section className="version-approval-notes">
+          <span>
+            Snapshot format
+          </span>
+
+          <p>
+            Version{" "}
+            {version.snapshot
+              .snapshot_format_version ??
+              "Unknown"}
+          </p>
+        </section>
+
+        {taxReconciliation ? (
+          <>
+            <section className="version-approval-notes">
+              <span>
+                Stored tax reconciliation
+              </span>
+
+              <p>
+                {formatStatus(
+                  taxReconciliation.status,
+                )}
+                {taxReconciliation
+                  .requires_attention
+                  ? " — review was required when this report was finalised."
+                  : " — no outstanding tax review was recorded."}
+              </p>
+            </section>
+
+            <section className="version-detail-summary">
+              <div>
+                <span>
+                  Configured tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .configured_taxation,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Ledger taxation
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .ledger_taxation,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Difference
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .difference,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Profit before tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .profit_before_tax,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+            </section>
+
+            <section className="version-detail-summary">
+              <div>
+                <span>
+                  Draft configured tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .draft_configured_taxation,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Confirmed configured tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .confirmed_configured_taxation,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Configured profit after tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .configured_profit_after_tax,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Ledger profit after tax
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    taxReconciliation
+                      .ledger_profit_after_tax,
+                    taxReconciliation.currency,
+                  )}
+                </strong>
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="version-approval-notes">
+            <span>
+              Stored tax reconciliation
+            </span>
+
+            <p>
+              This snapshot does not contain
+              tax reconciliation information.
+            </p>
+          </section>
+        )}
+
         <section className="version-snapshot-panel">
           <header>
             <h3>
-              Stored snapshot
+              Stored Tax Calculations
+            </h3>
+
+            <span>
+              {taxCalculations.length}
+              {" "}
+              calculation
+              {taxCalculations.length ===
+              1
+                ? ""
+                : "s"}
+            </span>
+          </header>
+
+          {taxCalculations.length ===
+          0 ? (
+            <div className="version-history-empty">
+              <span>
+                No stored tax calculation
+              </span>
+
+              <p>
+                No tax calculation was
+                recorded in this finalised
+                snapshot.
+              </p>
+            </div>
+          ) : (
+            <div className="version-history-list">
+              {taxCalculations.map(
+                (calculation) => (
+                  <section
+                    className="finalisation-lock-panel finalisation-lock-panel--locked"
+                    key={
+                      calculation.id
+                    }
+                  >
+                    <div>
+                      <span>
+                        {
+                          calculation
+                            .rule_code_snapshot
+                        }
+                        {" · "}
+                        {formatStatus(
+                          calculation.status,
+                        )}
+                      </span>
+
+                      <h2>
+                        {
+                          calculation
+                            .rule_name_snapshot
+                        }
+                      </h2>
+
+                      <p>
+                        {formatStatus(
+                          calculation
+                            .tax_type_snapshot,
+                        )}
+                      </p>
+
+                      <small>
+                        Calculation date:{" "}
+                        {formatDate(
+                          calculation
+                            .calculation_date,
+                        )}
+                      </small>
+
+                      <small>
+                        Calculated:{" "}
+                        {formatDateTime(
+                          calculation
+                            .calculated_at,
+                        )}
+                      </small>
+                    </div>
+
+                    <div className="finalisation-lock-panel__metadata">
+                      <span>
+                        Tax amount
+                      </span>
+
+                      <strong>
+                        {formatMoney(
+                          calculation
+                            .tax_amount,
+                          calculation
+                            .currency,
+                        )}
+                      </strong>
+
+                      <small>
+                        Tax base:{" "}
+                        {formatMoney(
+                          calculation
+                            .tax_base,
+                          calculation
+                            .currency,
+                        )}
+                      </small>
+
+                      <small>
+                        {formatTaxMethod(
+                          calculation,
+                        )}
+                      </small>
+                    </div>
+                  </section>
+                ),
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="version-snapshot-panel">
+          <header>
+            <h3>
+              Complete Stored Snapshot
             </h3>
 
             <span>

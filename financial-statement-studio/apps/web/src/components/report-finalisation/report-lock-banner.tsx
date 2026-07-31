@@ -24,11 +24,12 @@ export function ReportLockBanner({
           This report is {statusLabel}
         </h2>
 
-        <p>
-          Report metadata, journal entries and
-          disclosures can no longer be changed.
-          Corrections must be made through a new
-          controlled revision.
+                <p>
+          Report metadata, journal entries,
+          disclosures and tax calculations can
+          no longer be changed. Corrections must
+          be made through a new controlled
+          revision.
         </p>
       </div>
 

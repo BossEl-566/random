@@ -86,10 +86,50 @@ function formatStatus(
   value: string,
 ): string {
   return value
-    .replaceAll("_", " ")
+    .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) =>
       letter.toUpperCase(),
     );
+}
+
+function formatMoney(
+  value: string | number,
+  currency: string,
+): string {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return `${currency} ${String(
+      value,
+    )}`;
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      "en-GH",
+      {
+        style: "currency",
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      },
+    ).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(
+      2,
+    )}`;
+  }
+}
+
+function isTaxCheck(
+  code: string,
+): boolean {
+  return [
+    "tax_not_configured",
+    "draft_tax_calculations",
+    "tax_under_posted",
+    "tax_over_posted",
+  ].includes(code);
 }
 
 export function ReportFinalisationWorkspace({
@@ -439,7 +479,14 @@ export function ReportFinalisationWorkspace({
           </div>
         </Link>
 
-        <div className="app-topbar__right">
+                <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/tax`}
+          >
+            Tax Configuration
+          </Link>
+
           <Link
             className="topbar-link"
             href={`/reports/${reportId}/trial-balance`}
@@ -674,6 +721,59 @@ export function ReportFinalisationWorkspace({
                   </strong>
                 </article>
               </div>
+                            <div className="finalisation-metrics">
+                <article>
+                  <span>
+                    Tax calculations
+                  </span>
+
+                  <strong>
+                    {
+                      readiness.tax_calculation_count
+                    }
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Draft tax calculations
+                  </span>
+
+                  <strong>
+                    {
+                      readiness
+                        .draft_tax_calculation_count
+                    }
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Tax reconciliation
+                  </span>
+
+                  <strong>
+                    {formatStatus(
+                      readiness
+                        .tax_reconciliation_status,
+                    )}
+                  </strong>
+                </article>
+
+                <article>
+                  <span>
+                    Tax difference
+                  </span>
+
+                  <strong>
+                    {formatMoney(
+                      readiness
+                        .tax_reconciliation_difference,
+                      report.currency,
+                    )}
+                  </strong>
+                </article>
+              </div>
 
               {readiness.blockers.length >
               0 ? (
@@ -727,9 +827,20 @@ export function ReportFinalisationWorkspace({
                             {warning.title}
                           </strong>
 
-                          <p>
+                                                    <p>
                             {warning.detail}
                           </p>
+
+                          {isTaxCheck(
+                            warning.code,
+                          ) ? (
+                            <Link
+                              className="text-button"
+                              href={`/reports/${reportId}/tax`}
+                            >
+                              Review tax configuration
+                            </Link>
+                          ) : null}
                         </div>
                       </article>
                     ),
@@ -761,6 +872,61 @@ export function ReportFinalisationWorkspace({
                   </button>
                 </footer>
               ) : null}
+            </section>
+                        <section className="finalisation-lock-panel">
+              <div>
+                <span>
+                  Tax finalisation control
+                </span>
+
+                <h2>
+                  {formatStatus(
+                    readiness
+                      .tax_reconciliation_status,
+                  )}
+                </h2>
+
+                <p>
+                  The finalisation snapshot
+                  will preserve the report’s
+                  tax calculations, rule
+                  snapshots and reconciliation
+                  position.
+                </p>
+              </div>
+
+              <div className="finalisation-lock-panel__metadata">
+                <span>
+                  Reconciliation difference
+                </span>
+
+                <strong>
+                  {formatMoney(
+                    readiness
+                      .tax_reconciliation_difference,
+                    report.currency,
+                  )}
+                </strong>
+
+                <small>
+                  {
+                    readiness.tax_calculation_count
+                  }
+                  {" "}
+                  recorded calculation
+                  {readiness.tax_calculation_count ===
+                  1
+                    ? ""
+                    : "s"}
+                </small>
+
+                <Link
+                  className="secondary-button"
+                  href={`/reports/${reportId}/tax`}
+                >
+                  Review taxation
+                </Link>
+              </div>
             </section>
 
             <section className="version-history-panel">
