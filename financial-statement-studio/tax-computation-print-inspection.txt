@@ -1,0 +1,4391 @@
+===== PROFIT OR LOSS WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { StatementSection } from "@/components/financial-statements/statement-section";
+import {
+  formatPeriod,
+  formatStatementMoney,
+  toNumber,
+} from "@/components/financial-statements/statement-utils";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import {
+  getProfitOrLossStatement,
+} from "@/lib/financial-statements-api";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  FinancialReport,
+} from "@/types/financial-report";
+import type {
+  FinancialStatementSection,
+  ProfitOrLossStatement,
+} from "@/types/financial-statement";
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
+
+type ProfitOrLossWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function ProfitOrLossWorkspace({
+  reportId,
+}: ProfitOrLossWorkspaceProps) {
+  const [report, setReport] =
+    useState<FinancialReport | null>(
+      null,
+    );
+
+  const [company, setCompany] =
+    useState<Company | null>(null);
+
+  const [
+    statement,
+    setStatement,
+  ] = useState<ProfitOrLossStatement | null>(
+    null,
+  );
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    asOfInput,
+    setAsOfInput,
+  ] = useState("");
+
+  const [
+    appliedAsOf,
+    setAppliedAsOf,
+  ] = useState("");
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getFinancialReport(reportId)
+      .then(
+        (reportResponse) =>
+          Promise.all([
+            Promise.resolve(
+              reportResponse,
+            ),
+            getCompany(
+              reportResponse.company_id,
+            ),
+            getProfitOrLossStatement(
+              reportId,
+              appliedAsOf ||
+                undefined,
+            ),
+          ]),
+      )
+      .then(
+        ([
+          reportResponse,
+          companyResponse,
+          statementResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            reportResponse,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setStatement(
+            statementResponse,
+          );
+
+          setAsOfInput(
+            statementResponse.period_end,
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The Statement of Profit or Loss could not be calculated.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedAsOf,
+    reloadVersion,
+    reportId,
+  ]);
+
+  const sectionMap =
+    useMemo(() => {
+      return new Map<
+        string,
+        FinancialStatementSection
+      >(
+        statement?.sections.map(
+          (section) => [
+            section.key,
+            section,
+          ],
+        ) ?? [],
+      );
+    }, [statement]);
+
+  const directCostSections = [
+    sectionMap.get(
+      "cost_of_sales",
+    ),
+    sectionMap.get(
+      "direct_service_costs",
+    ),
+    sectionMap.get(
+      "manufacturing_costs",
+    ),
+  ].filter(
+    (
+      section,
+    ): section is FinancialStatementSection =>
+      section !== undefined,
+  );
+
+  function handleAsOfSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    if (!asOfInput) {
+      return;
+    }
+
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    if (
+      asOfInput ===
+      appliedAsOf
+    ) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+
+      return;
+    }
+
+    setAppliedAsOf(
+      asOfInput,
+    );
+  }
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  return (
+    <main className="financial-statement-page">
+      <header className="app-topbar financial-statement-screen-only">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Statement of Profit or Loss
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/financial-position`}
+          >
+            Financial position
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/trial-balance`}
+          >
+            Trial Balance
+          </Link>
+
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/cash-flows`}
+>
+  Cash flows
+</Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/changes-in-equity`}
+>
+  Changes in equity
+</Link>
+        </div>
+      </header>
+
+      <section className="financial-statement-toolbar financial-statement-screen-only">
+        <form
+          onSubmit={
+            handleAsOfSubmit
+          }
+        >
+          <label htmlFor="profit-or-loss-date">
+            Calculate up to
+          </label>
+
+          <div>
+            <input
+              id="profit-or-loss-date"
+              required
+              type="date"
+              min={
+                report?.period_start
+              }
+              max={
+                report?.period_end
+              }
+              value={asOfInput}
+              onChange={(event) =>
+                setAsOfInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button type="submit">
+              Recalculate
+            </button>
+          </div>
+        </form>
+
+        <div>
+  <button
+    className="text-button"
+    type="button"
+    disabled={
+      resourceState ===
+      "loading"
+    }
+    onClick={requestReload}
+  >
+    Refresh
+  </button>
+
+  <StatementPrintActions
+    disabled={
+      resourceState !==
+      "ready"
+    }
+    documentTitle={`${
+      company?.name?.trim() ||
+      "Company"
+    } — Statement of Profit or Loss`}
+    suggestedFileName={`${
+      company?.name?.trim() ||
+      "Company"
+    } - Statement of Profit or Loss - ${
+      statement?.period_end ??
+      report?.period_end ??
+      "report"
+    }.pdf`}
+  />
+</div>
+      </section>
+
+      <section
+        className="financial-statement-content"
+        aria-busy={
+          resourceState ===
+          "loading"
+        }
+      >
+        {resourceState === "loading" ? (
+          <div className="financial-statement-loading financial-statement-screen-only">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState === "error" ? (
+          <div className="journal-state-card journal-state-card--error financial-statement-screen-only">
+            <span>
+              Calculation unavailable
+            </span>
+
+            <h2>
+              Statement of Profit or Loss
+              could not be calculated
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={
+                requestReload
+              }
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        statement ? (
+          <article className="financial-statement-document">
+            <header className="financial-statement-document__header">
+              <div>
+                <p>
+                  {company?.name?.trim() ||
+  "Company"}
+                </p>
+
+                <h1>
+                  Statement of Profit or Loss
+                </h1>
+
+                <span>
+                  {formatPeriod(
+                    statement.period_start,
+                    statement.period_end,
+                  )}
+                </span>
+              </div>
+
+              <div className="financial-statement-document__currency">
+                <span>
+                  Currency
+                </span>
+
+                <strong>
+                  {statement.currency}
+                </strong>
+              </div>
+            </header>
+
+            <div className="financial-statement-document__body">
+              {sectionMap.get(
+                "revenue",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "revenue",
+                    )!
+                  }
+                />
+              ) : null}
+
+              {directCostSections.map(
+                (section) => (
+                  <StatementSection
+                    currency={
+                      statement.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      section
+                    }
+                    key={
+                      section.key
+                    }
+                  />
+                ),
+              )}
+
+              <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                <strong>
+                  Gross Profit
+                </strong>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.gross_profit,
+                  )}
+                </strong>
+              </div>
+
+              {sectionMap.get(
+                "other_income",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  hideWhenEmpty
+                  section={
+                    sectionMap.get(
+                      "other_income",
+                    )!
+                  }
+                />
+              ) : null}
+
+              {sectionMap.get(
+                "administrative_expenses",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  hideWhenEmpty
+                  section={
+                    sectionMap.get(
+                      "administrative_expenses",
+                    )!
+                  }
+                />
+              ) : null}
+
+              {sectionMap.get(
+                "selling_distribution_expenses",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  hideWhenEmpty
+                  section={
+                    sectionMap.get(
+                      "selling_distribution_expenses",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Operating Profit
+                </strong>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.operating_profit,
+                  )}
+                </strong>
+              </div>
+
+              {sectionMap.get(
+                "finance_costs",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  hideWhenEmpty
+                  section={
+                    sectionMap.get(
+                      "finance_costs",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Profit Before Tax
+                </strong>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.profit_before_tax,
+                  )}
+                </strong>
+              </div>
+
+              {sectionMap.get(
+                "taxation",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  hideWhenEmpty
+                  section={
+                    sectionMap.get(
+                      "taxation",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div
+                className={
+                  toNumber(
+                    statement.profit_after_tax,
+                  ) >= 0
+                    ? "financial-statement-final-total financial-statement-final-total--positive"
+                    : "financial-statement-final-total financial-statement-final-total--negative"
+                }
+              >
+                <div>
+                  <span>
+                    Result for the period
+                  </span>
+
+                  <strong>
+                    {toNumber(
+                      statement.profit_after_tax,
+                    ) >= 0
+                      ? "Profit After Tax"
+                      : "Loss After Tax"}
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.profit_after_tax,
+                  )}
+                </strong>
+              </div>
+            </div>
+
+            <footer className="financial-statement-document__footer">
+              <span>
+                Generated from posted,
+                non-voided journal entries.
+              </span>
+
+              <span>
+                Financial Statement Studio
+              </span>
+            </footer>
+          </article>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+===== FINANCIAL POSITION WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { StatementSection } from "@/components/financial-statements/statement-section";
+import {
+  formatStatementDate,
+  formatStatementMoney,
+} from "@/components/financial-statements/statement-utils";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import {
+  getStatementOfFinancialPosition,
+} from "@/lib/financial-statements-api";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  FinancialReport,
+} from "@/types/financial-report";
+import type {
+  FinancialStatementSection,
+  StatementOfFinancialPosition,
+} from "@/types/financial-statement";
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
+
+type FinancialPositionWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function FinancialPositionWorkspace({
+  reportId,
+}: FinancialPositionWorkspaceProps) {
+  const [report, setReport] =
+    useState<FinancialReport | null>(
+      null,
+    );
+
+  const [company, setCompany] =
+    useState<Company | null>(null);
+
+  const [
+    statement,
+    setStatement,
+  ] = useState<StatementOfFinancialPosition | null>(
+    null,
+  );
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    asOfInput,
+    setAsOfInput,
+  ] = useState("");
+
+  const [
+    appliedAsOf,
+    setAppliedAsOf,
+  ] = useState("");
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getFinancialReport(reportId)
+      .then(
+        (reportResponse) =>
+          Promise.all([
+            Promise.resolve(
+              reportResponse,
+            ),
+            getCompany(
+              reportResponse.company_id,
+            ),
+            getStatementOfFinancialPosition(
+              reportId,
+              appliedAsOf ||
+                undefined,
+            ),
+          ]),
+      )
+      .then(
+        ([
+          reportResponse,
+          companyResponse,
+          statementResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            reportResponse,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setStatement(
+            statementResponse,
+          );
+
+          setAsOfInput(
+            statementResponse.as_of,
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The Statement of Financial Position could not be calculated.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedAsOf,
+    reloadVersion,
+    reportId,
+  ]);
+
+  const sectionMap =
+    useMemo(() => {
+      return new Map<
+        string,
+        FinancialStatementSection
+      >(
+        statement?.sections.map(
+          (section) => [
+            section.key,
+            section,
+          ],
+        ) ?? [],
+      );
+    }, [statement]);
+
+  function handleAsOfSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    if (!asOfInput) {
+      return;
+    }
+
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    if (
+      asOfInput ===
+      appliedAsOf
+    ) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+
+      return;
+    }
+
+    setAppliedAsOf(
+      asOfInput,
+    );
+  }
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  return (
+    <main className="financial-statement-page">
+      <header className="app-topbar financial-statement-screen-only">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Statement of Financial Position
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/profit-or-loss`}
+          >
+            Profit or loss
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/trial-balance`}
+          >
+            Trial Balance
+          </Link>
+
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/cash-flows`}
+>
+  Cash flows
+</Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/changes-in-equity`}
+>
+  Changes in equity
+</Link>
+        </div>
+      </header>
+
+      <section className="financial-statement-toolbar financial-statement-screen-only">
+        <form
+          onSubmit={
+            handleAsOfSubmit
+          }
+        >
+          <label htmlFor="financial-position-date">
+            Statement as at
+          </label>
+
+          <div>
+            <input
+              id="financial-position-date"
+              required
+              type="date"
+              min={
+                report?.period_start
+              }
+              max={
+                report?.period_end
+              }
+              value={asOfInput}
+              onChange={(event) =>
+                setAsOfInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button type="submit">
+              Recalculate
+            </button>
+          </div>
+        </form>
+
+        <div>
+  <button
+    className="text-button"
+    type="button"
+    disabled={
+      resourceState ===
+      "loading"
+    }
+    onClick={requestReload}
+  >
+    Refresh
+  </button>
+
+  <StatementPrintActions
+    disabled={
+      resourceState !==
+      "ready"
+    }
+    documentTitle={`${
+      company?.name?.trim() ||
+      "Company"
+    } — Statement of Financial Position`}
+    suggestedFileName={`${
+      company?.name?.trim() ||
+      "Company"
+    } - Statement of Financial Position - ${
+      statement?.as_of ??
+      report?.period_end ??
+      "report"
+    }.pdf`}
+  />
+</div>
+      </section>
+
+      <section
+        className="financial-statement-content"
+        aria-busy={
+          resourceState ===
+          "loading"
+        }
+      >
+        {resourceState === "loading" ? (
+          <div className="financial-statement-loading financial-statement-screen-only">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState === "error" ? (
+          <div className="journal-state-card journal-state-card--error financial-statement-screen-only">
+            <span>
+              Calculation unavailable
+            </span>
+
+            <h2>
+              Statement of Financial Position
+              could not be calculated
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={
+                requestReload
+              }
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        statement ? (
+          <article className="financial-statement-document">
+            <header className="financial-statement-document__header">
+              <div>
+                <p>
+                  {company?.name?.trim() ||
+  "Company"}
+                </p>
+
+                <h1>
+                  Statement of Financial Position
+                </h1>
+
+                <span>
+                  As at{" "}
+                  {formatStatementDate(
+                    statement.as_of,
+                  )}
+                </span>
+              </div>
+
+              <div className="financial-statement-document__currency">
+                <span>
+                  Currency
+                </span>
+
+                <strong>
+                  {statement.currency}
+                </strong>
+              </div>
+            </header>
+
+            <div className="financial-statement-document__body">
+              <div className="financial-position-column-heading">
+                <span>Assets</span>
+              </div>
+
+              {sectionMap.get(
+                "non_current_assets",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "non_current_assets",
+                    )!
+                  }
+                />
+              ) : null}
+
+              {sectionMap.get(
+                "current_assets",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "current_assets",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div className="financial-statement-final-total">
+                <div>
+                  <span>
+                    Assets
+                  </span>
+
+                  <strong>
+                    Total Assets
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.total_assets,
+                  )}
+                </strong>
+              </div>
+
+              <div className="financial-position-column-heading">
+                <span>
+                  Equity and Liabilities
+                </span>
+              </div>
+
+              {sectionMap.get(
+                "equity",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "equity",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Total Equity
+                </strong>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.total_equity,
+                  )}
+                </strong>
+              </div>
+
+              {sectionMap.get(
+                "non_current_liabilities",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "non_current_liabilities",
+                    )!
+                  }
+                />
+              ) : null}
+
+              {sectionMap.get(
+                "current_liabilities",
+              ) ? (
+                <StatementSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    sectionMap.get(
+                      "current_liabilities",
+                    )!
+                  }
+                />
+              ) : null}
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Total Liabilities
+                </strong>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.total_liabilities,
+                  )}
+                </strong>
+              </div>
+
+              <div className="financial-statement-final-total">
+                <div>
+                  <span>
+                    Equity and liabilities
+                  </span>
+
+                  <strong>
+                    Total Equity and Liabilities
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {
+                      statement.currency
+                    }
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.total_liabilities_and_equity,
+                  )}
+                </strong>
+              </div>
+
+              <section
+                className={
+                  statement.is_balanced
+                    ? "financial-position-validation financial-position-validation--balanced"
+                    : "financial-position-validation financial-position-validation--error"
+                }
+              >
+                <div>
+                  <span>
+                    Accounting equation
+                  </span>
+
+                  <strong>
+                    {statement.is_balanced
+                      ? "Assets equal equity and liabilities"
+                      : "Statement is out of balance"}
+                  </strong>
+
+                  <p>
+                    Difference:{" "}
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement.accounting_equation_difference,
+                    )}
+                  </p>
+                </div>
+
+                <span>
+                  {statement.is_balanced
+                    ? "Balanced"
+                    : "Review required"}
+                </span>
+              </section>
+            </div>
+
+            <footer className="financial-statement-document__footer">
+              <span>
+                Current-year profit is included
+                automatically within equity.
+              </span>
+
+              <span>
+                Financial Statement Studio
+              </span>
+            </footer>
+          </article>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+===== CASH FLOW WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { CashFlowSection } from "@/components/financial-statements/cash-flow-section";
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
+import {
+  formatPeriod,
+  formatStatementMoney,
+  toNumber,
+} from "@/components/financial-statements/statement-utils";
+import {
+  getCashFlowReadiness,
+  getStatementOfCashFlows,
+} from "@/lib/cash-flow-api";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import {
+  listLedgerAccounts,
+  updateLedgerAccount,
+} from "@/lib/ledger-accounts-api";
+import type {
+  CashFlowReadiness,
+  CashFlowStatementSection,
+  StatementOfCashFlows,
+} from "@/types/cash-flow";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  FinancialReport,
+} from "@/types/financial-report";
+import type {
+  LedgerAccount,
+} from "@/types/ledger-account";
+
+type CashFlowWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function CashFlowWorkspace({
+  reportId,
+}: CashFlowWorkspaceProps) {
+  const [report, setReport] =
+    useState<FinancialReport | null>(
+      null,
+    );
+
+  const [company, setCompany] =
+    useState<Company | null>(
+      null,
+    );
+
+  const [accounts, setAccounts] =
+    useState<LedgerAccount[]>([]);
+
+  const [
+    readiness,
+    setReadiness,
+  ] = useState<CashFlowReadiness | null>(
+    null,
+  );
+
+  const [
+    statement,
+    setStatement,
+  ] = useState<StatementOfCashFlows | null>(
+    null,
+  );
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    asOfInput,
+    setAsOfInput,
+  ] = useState("");
+
+  const [
+    appliedAsOf,
+    setAppliedAsOf,
+  ] = useState("");
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  const [
+    selectedCashAccountId,
+    setSelectedCashAccountId,
+  ] = useState("");
+
+  const [
+    isMarkingCashAccount,
+    setIsMarkingCashAccount,
+  ] = useState(false);
+
+  const [
+    setupError,
+    setSetupError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getFinancialReport(reportId)
+      .then(
+        async (
+          reportResponse,
+        ) => {
+          const [
+            companyResponse,
+            accountResponse,
+            readinessResponse,
+          ] = await Promise.all([
+            getCompany(
+              reportResponse.company_id,
+            ),
+
+            listLedgerAccounts(
+              reportResponse.company_id,
+              {
+                includeInactive: true,
+                offset: 0,
+                limit: 500,
+              },
+            ),
+
+            getCashFlowReadiness(
+              reportId,
+            ),
+          ]);
+
+          const statementResponse =
+            readinessResponse.is_ready
+              ? await getStatementOfCashFlows(
+                  reportId,
+                  appliedAsOf ||
+                    undefined,
+                )
+              : null;
+
+          return {
+            reportResponse,
+            companyResponse,
+            accountResponse,
+            readinessResponse,
+            statementResponse,
+          };
+        },
+      )
+      .then(
+        ({
+          reportResponse,
+          companyResponse,
+          accountResponse,
+          readinessResponse,
+          statementResponse,
+        }) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            reportResponse,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setAccounts(
+            accountResponse.items,
+          );
+
+          setReadiness(
+            readinessResponse,
+          );
+
+          setStatement(
+            statementResponse,
+          );
+
+          setAsOfInput(
+            statementResponse
+              ?.period_end ??
+              reportResponse.period_end,
+          );
+
+          const cashCandidates =
+            accountResponse.items.filter(
+              (account) =>
+                account.is_active &&
+                !account
+                  .is_cash_equivalent &&
+                account
+                  .report_category ===
+                  "current_assets",
+            );
+
+          setSelectedCashAccountId(
+            (currentAccountId) => {
+              const currentStillExists =
+                cashCandidates.some(
+                  (account) =>
+                    account.id ===
+                    currentAccountId,
+                );
+
+              if (currentStillExists) {
+                return currentAccountId;
+              }
+
+              return (
+                cashCandidates[0]?.id ??
+                ""
+              );
+            },
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The Statement of Cash Flows could not be loaded.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedAsOf,
+    reloadVersion,
+    reportId,
+  ]);
+
+  const cashCandidates =
+    useMemo(
+      () =>
+        accounts.filter(
+          (account) =>
+            account.is_active &&
+            !account
+              .is_cash_equivalent &&
+            account
+              .report_category ===
+              "current_assets",
+        ),
+      [accounts],
+    );
+
+  const hasMissingCashWarning =
+    readiness?.warnings.some(
+      (warning) =>
+        warning.code ===
+        "NO_ACTIVE_CASH_ACCOUNT",
+    ) ?? false;
+
+  function handleAsOfSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    if (
+      !asOfInput ||
+      !readiness?.is_ready
+    ) {
+      return;
+    }
+
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    if (
+      asOfInput ===
+      appliedAsOf
+    ) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+
+      return;
+    }
+
+    setAppliedAsOf(
+      asOfInput,
+    );
+  }
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+    setSetupError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  async function handleMarkCashAccount(): Promise<void> {
+    if (!selectedCashAccountId) {
+      setSetupError(
+        "Select a current asset account to mark as cash or cash equivalent.",
+      );
+      return;
+    }
+
+    setIsMarkingCashAccount(true);
+    setSetupError(null);
+
+    try {
+      await updateLedgerAccount(
+        selectedCashAccountId,
+        {
+          is_cash_equivalent: true,
+          cash_flow_category:
+            "not_applicable",
+        },
+      );
+
+      requestReload();
+    } catch (error) {
+      setSetupError(
+        getErrorMessage(
+          error,
+          "The selected account could not be marked as cash.",
+        ),
+      );
+    } finally {
+      setIsMarkingCashAccount(
+        false,
+      );
+    }
+  }
+
+  const closingCashSection:
+    CashFlowStatementSection | null =
+    statement
+      ? {
+          key: "cash_accounts",
+          title:
+            "Cash and Cash Equivalents at Period End",
+          items:
+            statement.cash_accounts,
+          total:
+            statement.closing_cash_balance,
+        }
+      : null;
+
+  return (
+    <main className="financial-statement-page">
+      <header className="app-topbar financial-statement-screen-only">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Statement of Cash Flows
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/profit-or-loss`}
+          >
+            Profit or loss
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/financial-position`}
+          >
+            Financial position
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/trial-balance`}
+          >
+            Trial Balance
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+          <Link
+  className="topbar-link"
+  href={`/reports/${reportId}/statements/changes-in-equity`}
+>
+  Changes in equity
+</Link>
+        </div>
+      </header>
+
+      <section className="financial-statement-toolbar financial-statement-screen-only">
+        <form
+          onSubmit={
+            handleAsOfSubmit
+          }
+        >
+          <label htmlFor="cash-flow-date">
+            Calculate up to
+          </label>
+
+          <div>
+            <input
+              id="cash-flow-date"
+              required
+              type="date"
+              min={
+                report?.period_start
+              }
+              max={
+                report?.period_end
+              }
+              disabled={
+                !readiness?.is_ready
+              }
+              value={asOfInput}
+              onChange={(event) =>
+                setAsOfInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button
+              type="submit"
+              disabled={
+                !readiness?.is_ready
+              }
+            >
+              Recalculate
+            </button>
+          </div>
+        </form>
+
+        <div>
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              resourceState ===
+              "loading"
+            }
+            onClick={requestReload}
+          >
+            Refresh
+          </button>
+
+          <StatementPrintActions
+            disabled={
+              resourceState !==
+                "ready" ||
+              !statement
+            }
+            documentTitle={`${
+              company?.name?.trim() ||
+              "Company"
+            } — Statement of Cash Flows`}
+            suggestedFileName={`${
+              company?.name?.trim() ||
+              "Company"
+            } - Statement of Cash Flows - ${
+              statement?.period_end ??
+              report?.period_end ??
+              "report"
+            }.pdf`}
+          />
+        </div>
+      </section>
+
+      <section
+        className="financial-statement-content"
+        aria-busy={
+          resourceState ===
+          "loading"
+        }
+      >
+        {resourceState === "loading" ? (
+          <div className="financial-statement-loading financial-statement-screen-only">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState === "error" ? (
+          <div className="journal-state-card journal-state-card--error financial-statement-screen-only">
+            <span>
+              Calculation unavailable
+            </span>
+
+            <h2>
+              Statement of Cash Flows
+              could not be loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={requestReload}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState === "ready" &&
+        readiness &&
+        !readiness.is_ready ? (
+          <section className="cash-flow-readiness-card financial-statement-screen-only">
+            <header>
+              <div>
+                <p className="eyebrow">
+                  Cash-flow setup
+                </p>
+
+                <h1>
+                  Complete the Chart of Accounts
+                </h1>
+
+                <p>
+                  The Statement of Cash Flows
+                  cannot be calculated until
+                  cash accounts and cash-flow
+                  categories are configured.
+                </p>
+              </div>
+
+              <span>
+                {readiness.warnings.length}
+                {" "}
+                {readiness.warnings.length ===
+                1
+                  ? "warning"
+                  : "warnings"}
+              </span>
+            </header>
+
+            {setupError ? (
+              <div
+                className="form-alert form-alert--error"
+                role="alert"
+              >
+                {setupError}
+              </div>
+            ) : null}
+
+            {hasMissingCashWarning &&
+            cashCandidates.length > 0 ? (
+              <section className="cash-flow-quick-setup">
+                <div>
+                  <h2>
+                    Select the main cash account
+                  </h2>
+
+                  <p>
+                    Choose a bank, cash-on-hand,
+                    petty-cash or mobile-money
+                    account. It will be marked as
+                    cash or cash equivalent.
+                  </p>
+                </div>
+
+                <div>
+                  <select
+                    value={
+                      selectedCashAccountId
+                    }
+                    onChange={(event) =>
+                      setSelectedCashAccountId(
+                        event.target.value,
+                      )
+                    }
+                  >
+                    {cashCandidates.map(
+                      (account) => (
+                        <option
+                          value={account.id}
+                          key={account.id}
+                        >
+                          {account.account_code}
+                          {" — "}
+                          {account.account_name}
+                        </option>
+                      ),
+                    )}
+                  </select>
+
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={
+                      isMarkingCashAccount ||
+                      !selectedCashAccountId
+                    }
+                    onClick={() => {
+                      void handleMarkCashAccount();
+                    }}
+                  >
+                    {isMarkingCashAccount
+                      ? "Updating account..."
+                      : "Mark as cash account"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            <div className="cash-flow-warning-list">
+              {readiness.warnings.map(
+                (warning) => (
+                  <article
+                    key={[
+                      warning.code,
+                      warning.ledger_account_id ??
+                        "general",
+                    ].join("-")}
+                  >
+                    <span>
+                      {warning.code
+                        .replaceAll(
+                          "_",
+                          " ",
+                        )
+                        .toLowerCase()}
+                    </span>
+
+                    <p>
+                      {warning.message}
+                    </p>
+                  </article>
+                ),
+              )}
+            </div>
+
+            <footer>
+              {report ? (
+                <Link
+                  className="primary-button"
+                  href={`/companies/${report.company_id}/chart-of-accounts`}
+                >
+                  Open Chart of Accounts
+                </Link>
+              ) : null}
+
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={requestReload}
+              >
+                Check readiness again
+              </button>
+            </footer>
+          </section>
+        ) : null}
+
+        {resourceState === "ready" &&
+        readiness?.is_ready &&
+        statement ? (
+          <article className="financial-statement-document">
+            <header className="financial-statement-document__header">
+              <div>
+                <p>
+                  {company?.name?.trim() ||
+                    "Company"}
+                </p>
+
+                <h1>
+                  Statement of Cash Flows
+                </h1>
+
+                <span>
+                  {formatPeriod(
+                    statement.period_start,
+                    statement.period_end,
+                  )}
+                </span>
+              </div>
+
+              <div className="financial-statement-document__currency">
+                <span>
+                  Currency
+                </span>
+
+                <strong>
+                  {statement.currency}
+                </strong>
+              </div>
+            </header>
+
+            <div className="financial-statement-document__body">
+              <div className="financial-position-column-heading">
+                <span>
+                  Cash Flows from Operating Activities
+                </span>
+              </div>
+
+              <div className="cash-flow-starting-line">
+                <strong>
+                  Profit After Tax
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement.profit_after_tax,
+                  )}
+                </strong>
+              </div>
+
+              <CashFlowSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .non_cash_adjustments
+                }
+              />
+
+              <CashFlowSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .working_capital_adjustments
+                }
+              />
+
+              <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                <strong>
+                  Net Cash from Operating Activities
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .net_cash_from_operating_activities,
+                  )}
+                </strong>
+              </div>
+
+              <div className="financial-position-column-heading">
+                <span>
+                  Cash Flows from Investing Activities
+                </span>
+              </div>
+
+              <CashFlowSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .investing_activities
+                }
+              />
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Net Cash from Investing Activities
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .net_cash_from_investing_activities,
+                  )}
+                </strong>
+              </div>
+
+              <div className="financial-position-column-heading">
+                <span>
+                  Cash Flows from Financing Activities
+                </span>
+              </div>
+
+              <CashFlowSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .financing_activities
+                }
+              />
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Net Cash from Financing Activities
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .net_cash_from_financing_activities,
+                  )}
+                </strong>
+              </div>
+
+              <div
+                className={
+                  toNumber(
+                    statement
+                      .net_increase_decrease_in_cash,
+                  ) >= 0
+                    ? "financial-statement-final-total financial-statement-final-total--positive"
+                    : "financial-statement-final-total financial-statement-final-total--negative"
+                }
+              >
+                <div>
+                  <span>
+                    Net cash movement
+                  </span>
+
+                  <strong>
+                    {toNumber(
+                      statement
+                        .net_increase_decrease_in_cash,
+                    ) >= 0
+                      ? "Net Increase in Cash"
+                      : "Net Decrease in Cash"}
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .net_increase_decrease_in_cash,
+                  )}
+                </strong>
+              </div>
+
+              <section className="cash-flow-reconciliation">
+                <header>
+                  <h3>
+                    Cash Reconciliation
+                  </h3>
+                </header>
+
+                <div className="cash-flow-reconciliation__lines">
+                  <div>
+                    <span>
+                      Opening cash and cash equivalents
+                    </span>
+
+                    <strong>
+                      {statement.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        statement
+                          .opening_cash_balance,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Net increase or decrease in cash
+                    </span>
+
+                    <strong>
+                      {statement.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        statement
+                          .net_increase_decrease_in_cash,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Calculated closing cash
+                    </span>
+
+                    <strong>
+                      {statement.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        statement
+                          .calculated_closing_cash,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="cash-flow-reconciliation__closing">
+                    <span>
+                      Actual closing cash and cash equivalents
+                    </span>
+
+                    <strong>
+                      {statement.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        statement
+                          .closing_cash_balance,
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              </section>
+
+              {closingCashSection ? (
+                <CashFlowSection
+                  currency={
+                    statement.currency
+                  }
+                  section={
+                    closingCashSection
+                  }
+                />
+              ) : null}
+
+              <section
+                className={
+                  statement.is_reconciled
+                    ? "financial-position-validation financial-position-validation--balanced"
+                    : "financial-position-validation financial-position-validation--error"
+                }
+              >
+                <div>
+                  <span>
+                    Cash reconciliation
+                  </span>
+
+                  <strong>
+                    {statement.is_reconciled
+                      ? "Calculated cash agrees with the ledger"
+                      : "Cash balance does not reconcile"}
+                  </strong>
+
+                  <p>
+                    Difference:{" "}
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .cash_reconciliation_difference,
+                    )}
+                  </p>
+                </div>
+
+                <span>
+                  {statement.is_reconciled
+                    ? "Reconciled"
+                    : "Review required"}
+                </span>
+              </section>
+            </div>
+
+            <footer className="financial-statement-document__footer">
+              <span>
+                Prepared using the indirect
+                method from posted, non-voided
+                journal entries.
+              </span>
+
+              <span>
+                Financial Statement Studio
+              </span>
+            </footer>
+          </article>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+===== CHANGES IN EQUITY WORKSPACE =====
+"use client";
+
+import Link from "next/link";
+import {
+  type FormEvent,
+  useEffect,
+  useState,
+} from "react";
+
+import { EquityAccountTable } from "@/components/financial-statements/equity-account-table";
+import { EquityMovementSection } from "@/components/financial-statements/equity-movement-section";
+import { StatementPrintActions } from "@/components/financial-statements/statement-print-actions";
+import {
+  formatPeriod,
+  formatStatementMoney,
+  toNumber,
+} from "@/components/financial-statements/statement-utils";
+import {
+  getCompany,
+} from "@/lib/companies-api";
+import {
+  getStatementOfChangesInEquity,
+} from "@/lib/equity-statements-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import type {
+  Company,
+} from "@/types/company";
+import type {
+  StatementOfChangesInEquity,
+} from "@/types/equity-statement";
+import type {
+  FinancialReport,
+} from "@/types/financial-report";
+
+type EquityStatementWorkspaceProps = {
+  reportId: string;
+};
+
+type ResourceState =
+  | "loading"
+  | "ready"
+  | "error";
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof Error
+    ? error.message
+    : fallback;
+}
+
+export function EquityStatementWorkspace({
+  reportId,
+}: EquityStatementWorkspaceProps) {
+  const [report, setReport] =
+    useState<FinancialReport | null>(
+      null,
+    );
+
+  const [company, setCompany] =
+    useState<Company | null>(
+      null,
+    );
+
+  const [
+    statement,
+    setStatement,
+  ] =
+    useState<StatementOfChangesInEquity | null>(
+      null,
+    );
+
+  const [
+    resourceState,
+    setResourceState,
+  ] = useState<ResourceState>(
+    "loading",
+  );
+
+  const [
+    loadError,
+    setLoadError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    asOfInput,
+    setAsOfInput,
+  ] = useState("");
+
+  const [
+    appliedAsOf,
+    setAppliedAsOf,
+  ] = useState("");
+
+  const [
+    reloadVersion,
+    setReloadVersion,
+  ] = useState(0);
+
+  useEffect(() => {
+  let cancelled = false;
+
+  getFinancialReport(reportId)
+      .then(
+        async (
+          reportResponse,
+        ) => {
+          const [
+            companyResponse,
+            statementResponse,
+          ] = await Promise.all([
+            getCompany(
+              reportResponse.company_id,
+            ),
+
+            getStatementOfChangesInEquity(
+              reportId,
+              appliedAsOf ||
+                undefined,
+            ),
+          ]);
+
+          return {
+            reportResponse,
+            companyResponse,
+            statementResponse,
+          };
+        },
+      )
+      .then(
+        ({
+          reportResponse,
+          companyResponse,
+          statementResponse,
+        }) => {
+          if (cancelled) {
+            return;
+          }
+
+          setReport(
+            reportResponse,
+          );
+
+          setCompany(
+            companyResponse,
+          );
+
+          setStatement(
+            statementResponse,
+          );
+
+          setAsOfInput(
+            statementResponse.period_end,
+          );
+
+          setResourceState(
+            "ready",
+          );
+        },
+      )
+      .catch(
+        (error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+
+          setLoadError(
+            getErrorMessage(
+              error,
+              "The Statement of Changes in Equity could not be loaded.",
+            ),
+          );
+
+          setResourceState(
+            "error",
+          );
+        },
+      );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appliedAsOf,
+    reloadVersion,
+    reportId,
+  ]);
+
+  function handleAsOfSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ): void {
+    event.preventDefault();
+
+    if (!asOfInput) {
+      return;
+    }
+
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    if (
+      asOfInput ===
+      appliedAsOf
+    ) {
+      setReloadVersion(
+        (currentVersion) =>
+          currentVersion + 1,
+      );
+
+      return;
+    }
+
+    setAppliedAsOf(
+      asOfInput,
+    );
+  }
+
+  function requestReload(): void {
+    setResourceState(
+      "loading",
+    );
+
+    setLoadError(null);
+
+    setReloadVersion(
+      (currentVersion) =>
+        currentVersion + 1,
+    );
+  }
+
+  const profitIsPositive =
+    toNumber(
+      statement?.profit_after_tax ??
+        0,
+    ) >= 0;
+
+  const totalEquityIsPositive =
+    toNumber(
+      statement?.total_closing_equity ??
+        0,
+    ) >= 0;
+
+  return (
+    <main className="financial-statement-page">
+      <header className="app-topbar financial-statement-screen-only">
+        <Link
+          className="app-brand"
+          href={`/reports/${reportId}`}
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Changes in Equity
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/profit-or-loss`}
+          >
+            Profit or loss
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/financial-position`}
+          >
+            Financial position
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/statements/cash-flows`}
+          >
+            Cash flows
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}/trial-balance`}
+          >
+            Trial Balance
+          </Link>
+
+          <Link
+            className="topbar-link"
+            href={`/reports/${reportId}`}
+          >
+            Report overview
+          </Link>
+        </div>
+      </header>
+
+      <section className="financial-statement-toolbar financial-statement-screen-only">
+        <form
+          onSubmit={
+            handleAsOfSubmit
+          }
+        >
+          <label htmlFor="equity-statement-date">
+            Calculate up to
+          </label>
+
+          <div>
+            <input
+              id="equity-statement-date"
+              required
+              type="date"
+              min={
+                report?.period_start
+              }
+              max={
+                report?.period_end
+              }
+              value={asOfInput}
+              onChange={(event) =>
+                setAsOfInput(
+                  event.target.value,
+                )
+              }
+            />
+
+            <button
+              type="submit"
+            >
+              Recalculate
+            </button>
+          </div>
+        </form>
+
+        <div>
+          <button
+            className="text-button"
+            type="button"
+            disabled={
+              resourceState ===
+              "loading"
+            }
+            onClick={
+              requestReload
+            }
+          >
+            Refresh
+          </button>
+
+          <StatementPrintActions
+            disabled={
+              resourceState !==
+                "ready" ||
+              !statement
+            }
+            documentTitle={`${
+              company?.name?.trim() ||
+              "Company"
+            } — Statement of Changes in Equity`}
+            suggestedFileName={`${
+              company?.name?.trim() ||
+              "Company"
+            } - Statement of Changes in Equity - ${
+              statement?.period_end ??
+              report?.period_end ??
+              "report"
+            }.pdf`}
+          />
+        </div>
+      </section>
+
+      <section
+        className="financial-statement-content"
+        aria-busy={
+          resourceState ===
+          "loading"
+        }
+      >
+        {resourceState ===
+        "loading" ? (
+          <div className="financial-statement-loading financial-statement-screen-only">
+            <div />
+            <div />
+            <div />
+            <div />
+          </div>
+        ) : null}
+
+        {resourceState ===
+        "error" ? (
+          <div className="journal-state-card journal-state-card--error financial-statement-screen-only">
+            <span>
+              Calculation unavailable
+            </span>
+
+            <h2>
+              Statement of Changes in
+              Equity could not be loaded
+            </h2>
+
+            <p>{loadError}</p>
+
+            <button
+              className="primary-button"
+              type="button"
+              onClick={
+                requestReload
+              }
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {resourceState ===
+          "ready" &&
+        statement ? (
+          <article className="financial-statement-document equity-statement-document">
+            <header className="financial-statement-document__header">
+              <div>
+                <p>
+                  {company?.name?.trim() ||
+                    "Company"}
+                </p>
+
+                <h1>
+                  Statement of Changes in
+                  Equity
+                </h1>
+
+                <span>
+                  {formatPeriod(
+                    statement.period_start,
+                    statement.period_end,
+                  )}
+                </span>
+              </div>
+
+              <div className="financial-statement-document__currency">
+                <span>
+                  Currency
+                </span>
+
+                <strong>
+                  {statement.currency}
+                </strong>
+              </div>
+            </header>
+
+            <div className="financial-statement-document__body">
+              <div className="financial-position-column-heading">
+                <span>
+                  Movement in Recorded Equity
+                </span>
+              </div>
+
+              <div className="equity-opening-line">
+                <strong>
+                  Opening Recorded Equity
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .opening_recorded_equity,
+                  )}
+                </strong>
+              </div>
+
+              <EquityMovementSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .direct_increases
+                }
+              />
+
+              <EquityMovementSection
+                currency={
+                  statement.currency
+                }
+                section={
+                  statement
+                    .direct_decreases
+                }
+              />
+
+              <div className="financial-statement-subtotal">
+                <strong>
+                  Net Direct Movement in
+                  Equity
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .net_direct_equity_movement,
+                  )}
+                </strong>
+              </div>
+
+              <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                <strong>
+                  Recorded Closing Equity
+                </strong>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .recorded_closing_equity,
+                  )}
+                </strong>
+              </div>
+
+              <div
+                className={
+                  profitIsPositive
+                    ? "equity-profit-line equity-profit-line--positive"
+                    : "equity-profit-line equity-profit-line--negative"
+                }
+              >
+                <div>
+                  <span>
+                    Financial performance
+                  </span>
+
+                  <strong>
+                    {profitIsPositive
+                      ? "Profit After Tax"
+                      : "Loss After Tax"}
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .profit_after_tax,
+                  )}
+                </strong>
+              </div>
+
+              <div
+                className={
+                  totalEquityIsPositive
+                    ? "financial-statement-final-total financial-statement-final-total--positive"
+                    : "financial-statement-final-total financial-statement-final-total--negative"
+                }
+              >
+                <div>
+                  <span>
+                    Closing position
+                  </span>
+
+                  <strong>
+                    Total Closing Equity
+                  </strong>
+                </div>
+
+                <strong>
+                  <span>
+                    {statement.currency}
+                  </span>
+
+                  {formatStatementMoney(
+                    statement
+                      .total_closing_equity,
+                  )}
+                </strong>
+              </div>
+
+              <EquityAccountTable
+                statement={
+                  statement
+                }
+              />
+
+              <section
+                className={
+                  statement.is_reconciled
+                    ? "financial-position-validation financial-position-validation--balanced"
+                    : "financial-position-validation financial-position-validation--error"
+                }
+              >
+                <div>
+                  <span>
+                    Equity reconciliation
+                  </span>
+
+                  <strong>
+                    {statement.is_reconciled
+                      ? "Recorded equity movements reconcile"
+                      : "Equity movements require review"}
+                  </strong>
+
+                  <p>
+                    Difference:{" "}
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .equity_reconciliation_difference,
+                    )}
+                  </p>
+                </div>
+
+                <span>
+                  {statement.is_reconciled
+                    ? "Reconciled"
+                    : "Review required"}
+                </span>
+              </section>
+
+              <section className="equity-reconciliation-detail">
+                <div>
+                  <span>
+                    Calculated recorded closing
+                    equity
+                  </span>
+
+                  <strong>
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .calculated_recorded_closing_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Actual recorded closing
+                    equity
+                  </span>
+
+                  <strong>
+                    {statement.currency}
+                    {" "}
+                    {formatStatementMoney(
+                      statement
+                        .recorded_closing_equity,
+                    )}
+                  </strong>
+                </div>
+              </section>
+            </div>
+
+            <footer className="financial-statement-document__footer">
+              <span>
+                Prepared from posted,
+                non-voided journal entries.
+                Current-year profit is shown
+                separately from recorded equity.
+              </span>
+
+              <span>
+                Financial Statement Studio
+              </span>
+            </footer>
+          </article>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+===== REPORT OVERVIEW =====
+"use client";
+
+import Link from "next/link";
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  listCompanies,
+} from "@/lib/companies-api";
+import {
+  getFinancialReport,
+} from "@/lib/financial-reports-api";
+import type {
+  Company,
+} from "@/types/company";
+import {
+  REPORT_STATUS_OPTIONS,
+  REPORT_TYPE_OPTIONS,
+  type FinancialReport,
+} from "@/types/financial-report";
+import { ReportLockBanner } from "@/components/report-finalisation/report-lock-banner";
+
+type FinancialReportOverviewProps = {
+  reportId: string;
+};
+
+type OverviewState =
+  | {
+      status: "loading";
+      report: null;
+      company: null;
+      message: null;
+    }
+  | {
+      status: "ready";
+      report: FinancialReport;
+      company: Company | null;
+      message: null;
+    }
+  | {
+      status: "error";
+      report: null;
+      company: null;
+      message: string;
+    };
+
+const initialState: OverviewState = {
+  status: "loading",
+  report: null,
+  company: null,
+  message: null,
+};
+
+function getLabel(
+  options: ReadonlyArray<{
+    value: string;
+    label: string;
+  }>,
+  value: string,
+): string {
+  return (
+    options.find(
+      (option) =>
+        option.value === value,
+    )?.label ?? value
+  );
+}
+
+function formatDate(
+  value: string,
+): string {
+  const date = new Date(
+    `${value}T00:00:00`,
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    "en-GH",
+    {
+      dateStyle: "long",
+    },
+  ).format(date);
+}
+
+export function FinancialReportOverview({
+  reportId,
+}: FinancialReportOverviewProps) {
+  const [state, setState] =
+    useState<OverviewState>(
+      initialState,
+    );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([
+      getFinancialReport(reportId),
+      listCompanies({
+        includeInactive: true,
+        offset: 0,
+        limit: 100,
+      }),
+    ])
+      .then(
+        ([
+          report,
+          companyResponse,
+        ]) => {
+          if (cancelled) {
+            return;
+          }
+
+          const company =
+            companyResponse.items.find(
+              (candidate) =>
+                candidate.id ===
+                report.company_id,
+            ) ?? null;
+
+          setState({
+            status: "ready",
+            report,
+            company,
+            message: null,
+          });
+        },
+      )
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setState({
+          status: "error",
+          report: null,
+          company: null,
+          message:
+            error instanceof Error
+              ? error.message
+              : "The financial report could not be loaded.",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reportId]);
+
+  if (state.status === "loading") {
+    return (
+      <main className="report-overview-page">
+        <div className="report-overview-loading">
+          Loading financial report...
+        </div>
+      </main>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <main className="report-overview-page">
+        <div className="report-state-card report-state-card--error">
+          <span>
+            Report unavailable
+          </span>
+
+          <h2>
+            The financial report could not
+            be opened
+          </h2>
+
+          <p>{state.message}</p>
+
+          <Link
+            className="primary-button"
+            href="/reports"
+          >
+            Return to reports
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const {
+    report,
+    company,
+  } = state;
+
+  return (
+    <main className="report-overview-page">
+      <header className="app-topbar">
+        <Link
+          className="app-brand"
+          href="/reports"
+        >
+          <span>FS</span>
+
+          <div>
+            <strong>
+              Financial Statement Studio
+            </strong>
+
+            <small>
+              Report workspace
+            </small>
+          </div>
+        </Link>
+
+        <div className="app-topbar__right">
+  {company ? (
+    <Link
+      className="topbar-link"
+      href={`/companies/${company.id}/chart-of-accounts`}
+    >
+      Chart of accounts
+    </Link>
+  ) : null}
+
+  <Link
+    className="topbar-link"
+    href="/reports"
+  >
+    All reports
+  </Link>
+
+  <Link
+    className="topbar-link"
+    href="/companies"
+  >
+    Companies
+  </Link>
+</div>
+      </header>
+
+      <section className="report-overview-hero">
+        <div>
+          <p className="eyebrow">
+            {company?.name ??
+              "Financial report"}
+          </p>
+
+          <h1>{report.title}</h1>
+
+          <p>
+            {formatDate(
+              report.period_start,
+            )}
+            {" to "}
+            {formatDate(
+              report.period_end,
+            )}
+          </p>
+        </div>
+
+        <div className="report-overview-hero__status">
+          <span>Status</span>
+
+          <strong>
+            {getLabel(
+              REPORT_STATUS_OPTIONS,
+              report.status,
+            )}
+          </strong>
+        </div>
+      </section>
+
+      <section className="report-overview-summary">
+        <div>
+          <span>Report type</span>
+          <strong>
+            {getLabel(
+              REPORT_TYPE_OPTIONS,
+              report.report_type,
+            )}
+          </strong>
+        </div>
+
+        <div>
+          <span>Financial year</span>
+          <strong>
+            {report.financial_year}
+          </strong>
+        </div>
+
+        <div>
+          <span>Currency</span>
+          <strong>
+            {report.currency}
+          </strong>
+        </div>
+
+        <div>
+          <span>Business template</span>
+          <strong>
+            {report.business_template}
+          </strong>
+        </div>
+      </section>
+
+     <section className="report-accounting-launchpad">
+  <div className="report-accounting-launchpad__heading">
+    <div>
+      <p className="eyebrow">
+        Accounting workspace
+      </p>
+
+      <h2>
+        Continue preparing this report
+      </h2>
+
+      <p>
+        Record transactions, verify balances
+        and review automatically calculated
+        financial statements.
+      </p>
+    </div>
+  </div>
+    {[
+  "finalised",
+  "printed",
+  "archived",
+].includes(report.status) ? (
+  <ReportLockBanner
+    reportId={report.id}
+    status={report.status}
+  />
+) : null}
+  <div className="report-accounting-launchpad__grid">
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/journal`}
+    >
+      <span>01</span>
+
+      <h3>
+        General Journal
+      </h3>
+
+      <p>
+        Record opening balances, standard
+        transactions and adjustments using
+        equal debit and credit lines.
+      </p>
+
+      <strong>
+        Open journal →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card"
+      href={`/reports/${report.id}/trial-balance`}
+    >
+      <span>02</span>
+
+      <h3>
+        Trial Balance
+      </h3>
+
+      <p>
+        Review posted account balances and
+        confirm that total debits equal total
+        credits.
+      </p>
+
+      <strong>
+        View Trial Balance →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/profit-or-loss`}
+    >
+      <span>03</span>
+
+      <h3>
+        Profit or Loss
+      </h3>
+
+      <p>
+        Review revenue, direct costs,
+        operating expenses, taxation and
+        profit for the reporting period.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/statements/financial-position`}
+    >
+      <span>04</span>
+
+      <h3>
+        Financial Position
+      </h3>
+
+      <p>
+        Review assets, liabilities, equity
+        and the accounting-equation balance.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--equity"
+  href={`/reports/${report.id}/statements/changes-in-equity`}
+>
+  <span>05</span>
+
+  <h3>
+    Changes in Equity
+  </h3>
+
+  <p>
+    Review opening equity, owner
+    contributions, drawings, profit and
+    total closing equity.
+  </p>
+
+  <strong>
+    View statement →
+  </strong>
+</Link>
+
+    <Link
+      className="report-launch-card report-launch-card--statement report-launch-card--cash-flow"
+      href={`/reports/${report.id}/statements/cash-flows`}
+    >
+      <span>06</span>
+
+      <h3>
+        Cash Flows
+      </h3>
+
+      <p>
+        Review operating, investing and
+        financing cash flows using the
+        indirect method.
+      </p>
+
+      <strong>
+        View statement →
+      </strong>
+    </Link>
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--notes"
+  href={`/reports/${report.id}/notes`}
+>
+  <span>07</span>
+
+  <h3>
+    Notes and Disclosures
+  </h3>
+
+  <p>
+    Prepare accounting policies,
+    explanatory notes and supporting
+    statement disclosures.
+  </p>
+
+  <strong>
+    Manage notes →
+  </strong>
+</Link>
+
+    {company ? (
+      <Link
+        className="report-launch-card"
+        href={`/companies/${company.id}/chart-of-accounts`}
+      >
+        <span>08</span>
+
+        <h3>
+          Chart of Accounts
+        </h3>
+
+        <p>
+          Add, classify, group and manage
+          the ledger accounts available to
+          this report.
+        </p>
+
+        <strong>
+          Manage accounts →
+        </strong>
+      </Link>
+    ) : null}
+        <Link
+      className="report-launch-card report-launch-card--statement"
+      href={`/reports/${report.id}/tax`}
+    >
+      <span>09</span>
+
+      <h3>
+        Tax Configuration
+      </h3>
+
+      <p>
+        Manage taxpayer profiles,
+        effective tax rules, calculations
+        and ledger reconciliation.
+      </p>
+
+      <strong>
+        Manage taxation →
+      </strong>
+    </Link>
+
+    <Link
+  className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
+  href={`/reports/${report.id}/finalisation`}
+>
+  <span>10</span>
+
+  <h3>
+    Finalisation and Versions
+  </h3>
+
+  <p>
+    Check readiness, approve the report,
+    verify immutable snapshots and create
+    controlled revisions.
+  </p>
+
+  <strong>
+    Review finalisation →
+  </strong>
+</Link>
+  </div>
+</section>
+    </main>
+  );
+}
+===== GLOBAL PRINT CSS MATCHES =====
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4483:    padding: 16px 22px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4484:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4485:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4486:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4487:@media print {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4488:  @page {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4489:    size: A4;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4490:    margin: 14mm;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4491:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4492:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4493:  body {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4494:    background: #ffffff !important;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4495:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4496:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4497:  .financial-statement-page {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4498:    width: 100%;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4499:    min-height: auto;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4500:    margin: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4501:    padding: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4502:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4503:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4504:  .financial-statement-screen-only {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4505:    display: none !important;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4542:    break-inside: avoid;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4543:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4544:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4545:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4546:.statement-print-actions {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4547:  display: flex;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4548:  align-items: flex-end;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4549:  flex-direction: column;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4550:  gap: 7px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4551:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4552:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4553:.statement-print-actions__buttons {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4554:  display: flex;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4555:  gap: 8px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4556:  flex-wrap: wrap;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4557:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4558:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4559:.statement-print-actions__status {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4560:  max-width: 540px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4561:  margin: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4562:  font-size: 0.69rem;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4563:  line-height: 1.45;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4564:  text-align: right;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4565:  overflow-wrap: anywhere;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4566:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4567:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4568:.statement-print-actions__status--success {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4569:  color: #067647;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4570:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4571:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4572:.statement-print-actions__status--cancelled,
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4573:.statement-print-actions__status--info {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4574:  color: var(--muted);
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4575:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4576:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4577:.statement-print-actions__status--error {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4578:  color: #b42318;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4579:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4580:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4581:@media (max-width: 760px) {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4582:  .statement-print-actions {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4583:    width: 100%;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4584:    align-items: stretch;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4585:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4586:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4587:  .statement-print-actions__buttons {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4588:    display: grid;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4589:    grid-template-columns:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4590:      1fr 1fr;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4591:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4592:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4593:  .statement-print-actions__status {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4594:    max-width: none;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4595:    text-align: left;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4596:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4597:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4598:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4599:@media print {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4600:  .statement-print-actions {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4601:    display: none !important;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4602:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4603:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4604:.cash-flow-readiness-card {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4605:  overflow: hidden;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4606:  border: 1px solid #d7dee8;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4607:  border-radius: 20px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4608:  background: #ffffff;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4609:  box-shadow:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4610:    0 18px 55px
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4611:    rgba(16, 24, 40, 0.08);
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4612:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4613:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4614:.cash-flow-readiness-card > header {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4615:  display: flex;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4616:  align-items: flex-start;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4617:  justify-content: space-between;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4618:  gap: 24px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4872:    text-align: left;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4873:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4874:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4875:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4876:@media print {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4877:  .cash-flow-reconciliation,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4878:  .cash-flow-section,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4879:  .cash-flow-starting-line {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4880:    break-inside: avoid;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4881:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4882:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4883:  .cash-flow-readiness-card {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4884:    display: none !important;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4885:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4886:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4887:.equity-statement-document {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4888:  max-width: 1120px;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4889:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4890:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4891:.equity-opening-line {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4892:  display: grid;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4893:  grid-template-columns:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:4894:    minmax(0, 1fr)
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5145:    grid-template-columns: 1fr;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5146:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5147:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5148:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5149:@media print {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5150:  .equity-opening-line,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5151:  .equity-profit-line,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5152:  .equity-movement-section,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5153:  .equity-reconciliation-detail {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5154:    break-inside: avoid;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5155:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5156:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5157:  .equity-account-breakdown {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5158:    break-inside: auto;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5159:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5160:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5161:  .equity-account-table-wrapper {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5162:    overflow: visible;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5163:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5164:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5165:  .equity-account-table {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5166:    min-width: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5167:    font-size: 0.57rem;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5834:    padding-left: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5835:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5836:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5837:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5838:@media print {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5839:  .notes-screen-only,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5840:  .notes-management-panel,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5841:  .notes-dialog-backdrop {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5842:    display: none !important;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5843:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5844:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5845:  .notes-content {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5846:    display: block;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5847:    padding: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5848:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5849:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5850:  .notes-document {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5851:    max-width: none;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5852:    border: 0;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5853:    box-shadow: none;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5854:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5855:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\globals.css:5856:  .printable-report-note {
+
+===== FRONTEND PRINT CODE MATCHES =====
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:18:    description:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:19:      "Local offline storage is connected and responding correctly.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:20:  },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:21:  {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:22:    title: "Electron desktop",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:23:    description:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:24:      "The Windows desktop shell will be connected in the next checkpoint.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:25:  },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:26:];
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:27:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:28:export default function Home() {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:29:  return (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:30:    <main className="page-shell">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:31:      <section className="hero">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:32:        <div className="hero__content">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:33:          <div className="brand-mark" aria-hidden="true">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:34:            FS
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:35:          </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:36:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:37:          <p className="eyebrow">Financial Statement Studio</p>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\app\page.tsx:38:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:58:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:59:    try {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:60:      if (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:61:        window.desktopAPI
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:62:          ?.isElectron
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:63:      ) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:64:        const result =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:65:          await window.desktopAPI
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:66:            .printCurrentPage(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:67:              request,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:68:            );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:69:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:70:        setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:71:          type: result.status,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:72:          message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:73:            result.message,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:74:        });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:75:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:76:        return;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:77:      }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:78:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:79:      window.print();
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:80:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:81:      setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:82:        type: "info",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:83:        message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:84:          "The browser print dialog was opened.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:85:      });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:86:    } catch (error) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:87:      setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:88:        type: "error",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:89:        message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:90:          error instanceof Error
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:91:            ? error.message
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:92:            : "The statement could not be printed.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:93:      });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:94:    } finally {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:95:      setActiveAction(null);
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:96:    }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:97:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:98:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:99:  async function handleSavePdf(): Promise<void> {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:100:    setActiveAction("pdf");
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:101:    setStatusMessage(null);
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:102:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:103:    try {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:104:      if (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:105:        window.desktopAPI
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:106:          ?.isElectron
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:107:      ) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:108:        const result =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:109:          await window.desktopAPI
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:110:            .saveCurrentPageAsPdf(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:111:              request,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:112:            );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:113:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:114:        setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:115:          type: result.status,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:116:          message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:117:            result.status ===
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:118:              "success" &&
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:119:            result.filePath
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:120:              ? `${result.message} ${result.filePath}`
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:121:              : result.message,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:122:        });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:123:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:124:        return;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:125:      }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:126:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:127:      window.print();
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:128:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:129:      setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:130:        type: "info",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:131:        message:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:132:          "Choose "Save as PDF" in the browser print dialog.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:133:      });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:134:    } catch (error) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:135:      setStatusMessage({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:136:        type: "error",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:137:        message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:138:          error instanceof Error
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:139:            ? error.message
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:140:            : "The statement could not be saved as a PDF.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:141:      });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:142:    } finally {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:143:      setActiveAction(null);
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:144:    }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:145:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:146:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:147:  return (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:148:    <div className="statement-print-actions">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:149:      <div className="statement-print-actions__buttons">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:150:        <button
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:151:          className="secondary-button"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:152:          type="button"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:153:          disabled={
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:154:            disabled ||
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:155:            isBusy
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:156:          }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:171:            disabled ||
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:172:            isBusy
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:173:          }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:174:          onClick={() => {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:175:            void handleSavePdf();
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:176:          }}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:177:        >
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:178:          {activeAction === "pdf"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:179:            ? "Creating PDF..."
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:180:            : "Save as PDF"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:181:        </button>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:182:      </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:183:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:184:      {statusMessage ? (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:185:        <p
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:186:          className={`statement-print-actions__status statement-print-actions__status--${statusMessage.type}`}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:187:          role={
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:188:            statusMessage.type ===
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:189:            "error"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:190:              ? "alert"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:191:              : "status"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:192:          }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:193:          aria-live="polite"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:194:        >
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:195:          {statusMessage.message}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\financial-statements\statement-print-actions.tsx:196:        </p>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:4:  useSyncExternalStore,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:5:} from "react";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:6:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:7:type DesktopInformation = {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:8:  isElectron: boolean;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:9:  platform: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:10:  versions: {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:11:    electron: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:12:    chrome: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:13:    node: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:14:  };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:15:};
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:16:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:17:/*
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:18: * Electron information does not currently emit change events.
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:19: * This stable subscription therefore returns only a cleanup function.
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:20: */
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:21:function subscribeToDesktopInformation(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:22:): () => void {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:23:  return () => {};
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:24:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:25:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:26:function getDesktopInformationSnapshot():
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:27:  | DesktopInformation
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:28:  | null {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:29:  return window.desktopAPI ?? null;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:30:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:31:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:32:/*
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:33: * During server rendering and hydration, Electron's window API is not
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:34: * available. Returning null keeps the server and initial client output
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:35: * consistent.
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:36: */
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:37:function getServerDesktopInformationSnapshot(): null {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:38:  return null;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:39:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:40:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:41:function getPlatformName(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:42:  platform: string,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:43:): string {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:44:  const platformNames: Record<
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:45:    string,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:46:    string
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:47:  > = {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:48:    win32: "Windows",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:49:    darwin: "macOS",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:64:      getServerDesktopInformationSnapshot,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:65:    );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:66:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:67:  const isDesktop =
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:68:    desktopInformation?.isElectron === true;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:69:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:70:  const statusLabel = isDesktop
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:71:    ? "Desktop active"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:72:    : "Browser mode";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:73:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:74:  return (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:75:    <section
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:76:      className={`status-card ${
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:77:        isDesktop
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:78:          ? "status-card--connected"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:79:          : "status-card--loading"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:80:      }`}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:81:      aria-live="polite"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:82:    >
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:83:      <div className="status-card__header">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:84:        <div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:86:            Desktop environment
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:87:          </p>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:88:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:89:          <h2>
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:90:            Electron application shell
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:91:          </h2>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:92:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:93:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:94:        <div className="status-badge">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:95:          <span className="status-badge__dot" />
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:96:          {statusLabel}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:97:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:98:      </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:99:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:100:      <p className="status-card__message">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:101:        {isDesktop
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:102:          ? "The Next.js interface is running inside the Electron desktop application."
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:103:          : "Open the project through Electron to activate desktop features."}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:104:      </p>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:105:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:106:      <dl className="status-details">
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:107:        <div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:108:          <dt>Application mode</dt>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:109:          <dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:110:            {isDesktop
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:111:              ? "Electron desktop"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:112:              : "Web browser"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:113:          </dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:114:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:115:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:116:        <div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:117:          <dt>Operating system</dt>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:118:          <dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:119:            {desktopInformation
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:120:              ? getPlatformName(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:121:                  desktopInformation.platform,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:122:                )
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:123:              : "Not available"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:124:          </dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:125:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:126:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:127:        <div>
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:128:          <dt>Electron</dt>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:129:          <dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:130:            {desktopInformation?.versions
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:131:              .electron ?? "Not available"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:132:          </dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:133:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:134:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:135:        <div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:136:          <dt>Chromium</dt>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:137:          <dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:138:            {desktopInformation?.versions
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:139:              .chrome ?? "Not available"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:140:          </dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:141:        </div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:142:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:143:        <div>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:144:          <dt>Node.js</dt>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:145:          <dd>
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:146:            {desktopInformation?.versions
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\components\desktop-status-card.tsx:147:              .node ?? "Not available"}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:17:    filePath?: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:18:  };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:19:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:20:  interface DesktopAPI {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:21:    isElectron: boolean;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:22:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:23:    platform: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:24:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:25:    versions: {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:26:      electron: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:27:      chrome: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:28:      node: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:29:    };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:30:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:31:    printCurrentPage(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:32:      request: DesktopPrintRequest,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:33:    ): Promise<DesktopOperationResult>;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:34:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:35:    saveCurrentPageAsPdf(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:36:      request: DesktopPrintRequest,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:37:    ): Promise<DesktopOperationResult>;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:38:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:39:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:40:  interface Window {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:41:    desktopAPI?: DesktopAPI;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:42:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\web\src\types\electron.d.ts:43:}
+
+===== DESKTOP FILE INVENTORY =====
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\package.json
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\tsconfig.json
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\backend-manager.ts
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts
+C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\url-waiter.ts
+
+===== DESKTOP PRINT CODE MATCHES =====
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:3:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:4:import {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:5:  app,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:6:  BrowserWindow,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:7:  dialog,
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:8:  ipcMain,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:9:} from "electron";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:10:import type {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:11:  IpcMainInvokeEvent,
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:12:  SaveDialogOptions,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:13:} from "electron";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:14:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:15:import {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:16:  ensureBackendRunning,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:17:  stopBackend,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:18:} from "./backend-manager";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:19:import { waitForUrl } from "./url-waiter";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:20:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:21:const FRONTEND_URL =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:22:  process.env.FRONTEND_URL ??
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:23:  "http://localhost:3000";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:24:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:25:const PRINT_CURRENT_PAGE_CHANNEL =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:26:  "desktop:print-current-page";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:27:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:28:const SAVE_CURRENT_PAGE_AS_PDF_CHANNEL =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:29:  "desktop:save-current-page-as-pdf";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:30:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:31:type DesktopPrintRequest = {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:32:  documentTitle: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:96:  return false;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:97:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:98:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:99:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:100:function requireAllowedStatementSender(
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:101:  event: IpcMainInvokeEvent,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:102:): void {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:103:  const senderUrl =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:104:    event.sender.getURL();
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:105:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:106:  if (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:107:    !isAllowedStatementUrl(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:108:      senderUrl,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:109:    )
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:110:  ) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:111:    throw new Error(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:112:      "Printing is only allowed from a financial statement page.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:113:    );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:114:  }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:115:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:116:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:117:function normalizePrintRequest(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:118:  value: unknown,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:119:): DesktopPrintRequest {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:120:  if (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:121:    typeof value !== "object" ||
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:184:    .endsWith(".pdf")
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:185:    ? filePath
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:186:    : `${filePath}.pdf`;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:187:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:188:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:189:async function showPdfSaveDialog(
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:190:  event: IpcMainInvokeEvent,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:191:  request: DesktopPrintRequest,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:192:): Promise<{
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:193:  canceled: boolean;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:194:  filePath: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:195:}> {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:196:  const parentWindow =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:197:    BrowserWindow.fromWebContents(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:198:      event.sender,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:199:    );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:200:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:201:  const options: SaveDialogOptions = {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:202:    title: `Save ${request.documentTitle}`,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:203:    defaultPath: path.join(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:204:      app.getPath("documents"),
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:205:      sanitizePdfFileName(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:206:        request.suggestedFileName,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:207:      ),
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:208:    ),
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:209:    buttonLabel: "Save PDF",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:210:    filters: [
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:211:      {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:212:        name: "PDF Document",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:213:        extensions: ["pdf"],
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:214:      },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:215:    ],
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:216:    properties: [
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:217:      "showOverwriteConfirmation",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:218:    ],
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:219:  };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:220:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:221:  const result = parentWindow
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:222:    ? await dialog.showSaveDialog(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:223:        parentWindow,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:224:        options,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:225:      )
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:226:    : await dialog.showSaveDialog(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:227:        options,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:228:      );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:229:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:230:  return {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:231:    canceled: result.canceled,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:232:    filePath: result.filePath,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:233:  };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:234:}
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:235:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:236:function registerDesktopIpcHandlers(): void {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:237:  ipcMain.removeHandler(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:238:    PRINT_CURRENT_PAGE_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:239:  );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:240:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:241:  ipcMain.removeHandler(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:242:    SAVE_CURRENT_PAGE_AS_PDF_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:243:  );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:244:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:245:  ipcMain.handle(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:246:    PRINT_CURRENT_PAGE_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:247:    async (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:248:      event,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:249:      requestValue: unknown,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:250:    ): Promise<DesktopOperationResult> => {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:251:      try {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:252:        requireAllowedStatementSender(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:253:          event,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:254:        );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:255:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:256:        normalizePrintRequest(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:257:          requestValue,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:258:        );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:259:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:260:        const printResult =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:261:          await new Promise<{
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:262:            success: boolean;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:263:            failureReason: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:264:          }>((resolve) => {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:265:            event.sender.print(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:324:        };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:325:      }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:326:    },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:327:  );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:328:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:329:  ipcMain.handle(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:330:    SAVE_CURRENT_PAGE_AS_PDF_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:331:    async (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:332:      event,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:333:      requestValue: unknown,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:334:    ): Promise<DesktopOperationResult> => {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:335:      try {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:336:        requireAllowedStatementSender(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:337:          event,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:338:        );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:339:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:340:        const request =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:341:          normalizePrintRequest(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:342:            requestValue,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:343:          );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:344:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:345:        const saveResult =
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:346:          await showPdfSaveDialog(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:347:            event,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:348:            request,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:349:          );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:350:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:351:        if (
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:352:          saveResult.canceled ||
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:353:          !saveResult.filePath
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:354:        ) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:355:          return {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:356:            status: "cancelled",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:357:            message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:358:              "PDF saving was cancelled.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:359:          };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:360:        }
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:361:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:362:        const outputPath =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:363:          ensurePdfExtension(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:364:            saveResult.filePath,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:365:          );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:366:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:367:        const pdfData =
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:368:          await event.sender.printToPDF({
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:369:            landscape: false,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:370:            displayHeaderFooter: false,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:371:            printBackground: true,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:372:            pageSize: "A4",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:373:            preferCSSPageSize: true,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:374:            scale: 1,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:375:          });
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:376:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:377:        await writeFile(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:378:          outputPath,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:379:          pdfData,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:380:        );
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:381:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:382:        return {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:383:          status: "success",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:384:          message:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:385:            "The financial statement was saved successfully.",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:386:          filePath: outputPath,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:387:        };
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\main.ts:388:      } catch (error) {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:1:import {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:2:  contextBridge,
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:3:  ipcRenderer,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:4:} from "electron";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:5:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:6:const PRINT_CURRENT_PAGE_CHANNEL =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:7:  "desktop:print-current-page";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:8:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:9:const SAVE_CURRENT_PAGE_AS_PDF_CHANNEL =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:10:  "desktop:save-current-page-as-pdf";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:11:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:12:type DesktopPrintRequest = {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:13:  documentTitle: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:14:  suggestedFileName: string;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:15:};
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:16:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:17:type DesktopOperationStatus =
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:18:  | "success"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:19:  | "cancelled"
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:20:  | "error";
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:21:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:22:type DesktopOperationResult = {
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:23:  status: DesktopOperationStatus;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:40:  },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:41:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:42:  printCurrentPage(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:43:    request: DesktopPrintRequest,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:44:  ): Promise<DesktopOperationResult> {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:45:    return ipcRenderer.invoke(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:46:      PRINT_CURRENT_PAGE_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:47:      request,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:48:    ) as Promise<DesktopOperationResult>;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:49:  },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:50:
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:51:  saveCurrentPageAsPdf(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:52:    request: DesktopPrintRequest,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:53:  ): Promise<DesktopOperationResult> {
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:54:    return ipcRenderer.invoke(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:55:      SAVE_CURRENT_PAGE_AS_PDF_CHANNEL,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:56:      request,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:57:    ) as Promise<DesktopOperationResult>;
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:58:  },
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:59:};
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:60:
+> C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:61:contextBridge.exposeInMainWorld(
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:62:  "desktopAPI",
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:63:  desktopApi,
+  C:\Users\Windows User\Desktop\Project\Account\random\financial-statement-studio\apps\desktop\src\preload.ts:64:);
