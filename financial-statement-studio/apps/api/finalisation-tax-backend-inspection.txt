@@ -1,0 +1,1847 @@
+===== FINALISATION SCHEMAS =====
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+)
+
+
+class FinalisationCheck(BaseModel):
+    code: str
+    title: str
+    detail: str
+
+
+class ReportFinalisationReadinessResponse(
+    BaseModel,
+):
+    financial_report_id: str
+    report_status: str
+
+    can_finalise: bool
+
+    posted_entry_count: int
+    draft_entry_count: int
+    active_note_count: int
+
+    trial_balance_is_balanced: bool
+
+    tax_calculation_count: int
+    draft_tax_calculation_count: int
+
+    tax_reconciliation_status: str
+    tax_reconciliation_difference: Decimal
+
+    blockers: list[FinalisationCheck]
+    warnings: list[FinalisationCheck]
+
+    checked_at: datetime
+
+
+class FinaliseFinancialReportRequest(
+    BaseModel,
+):
+    accountant_name: str = Field(
+        min_length=1,
+        max_length=180,
+    )
+
+    finalised_by: str = Field(
+        min_length=1,
+        max_length=180,
+    )
+
+    approval_notes: str | None = Field(
+        default=None,
+        max_length=20000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+
+class FinancialReportVersionSummary(
+    BaseModel,
+):
+    id: str
+    financial_report_id: str
+
+    revision_series_id: str
+    revision_number: int
+
+    finalised_at: datetime
+    finalised_by: str
+    accountant_name: str
+
+    snapshot_checksum: str
+
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class FinancialReportVersionResponse(
+    FinancialReportVersionSummary,
+):
+    approval_notes: str | None
+
+    snapshot_json: str
+    snapshot: dict[str, Any]
+
+
+class FinancialReportVersionListResponse(
+    BaseModel,
+):
+    financial_report_id: str
+    revision_series_id: str
+
+    items: list[
+        FinancialReportVersionSummary
+    ]
+
+    total: int
+
+
+class FinaliseFinancialReportResponse(
+    BaseModel,
+):
+    financial_report_id: str
+    report_status: str
+
+    revision_series_id: str
+    revision_number: int
+
+    finalised_at: datetime
+    accountant_name: str
+    finalised_by: str
+
+    version: FinancialReportVersionSummary
+
+
+class CreateFinancialReportRevisionRequest(
+    BaseModel,
+):
+    revision_reason: str = Field(
+        min_length=1,
+        max_length=20000,
+    )
+
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+===== FINALISATION ROUTES =====
+from typing import NoReturn
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.schemas.financial_report import (
+    FinancialReportResponse,
+)
+from app.schemas.report_finalisation import (
+    CreateFinancialReportRevisionRequest,
+    FinaliseFinancialReportRequest,
+    FinaliseFinancialReportResponse,
+    FinancialReportVersionListResponse,
+    FinancialReportVersionResponse,
+    ReportFinalisationReadinessResponse,
+)
+from app.services.report_finalisation_service import (
+    ReportFinalisationConflictError,
+    ReportFinalisationNotFoundError,
+    ReportFinalisationPersistenceError,
+    ReportFinalisationService,
+    ReportFinalisationServiceError,
+    ReportFinalisationValidationError,
+)
+
+
+router = APIRouter()
+
+report_finalisation_service = (
+    ReportFinalisationService()
+)
+
+
+def raise_finalisation_http_error(
+    error:
+        ReportFinalisationServiceError,
+) -> NoReturn:
+    if isinstance(
+        error,
+        ReportFinalisationNotFoundError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
+            detail=str(error),
+        ) from error
+
+    if isinstance(
+        error,
+        ReportFinalisationValidationError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+            ),
+            detail=str(error),
+        ) from error
+
+    if isinstance(
+        error,
+        ReportFinalisationConflictError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=str(error),
+        ) from error
+
+    if isinstance(
+        error,
+        ReportFinalisationPersistenceError,
+    ):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+            ),
+            detail=str(error),
+        ) from error
+
+    raise HTTPException(
+        status_code=(
+            status.HTTP_500_INTERNAL_SERVER_ERROR
+        ),
+        detail=(
+            "The finalisation operation could not be completed."
+        ),
+    ) from error
+
+
+@router.get(
+    (
+        "/financial-reports/"
+        "{report_id}/finalisation-readiness"
+    ),
+    response_model=(
+        ReportFinalisationReadinessResponse
+    ),
+)
+def get_finalisation_readiness(
+    report_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> ReportFinalisationReadinessResponse:
+    try:
+        return (
+            report_finalisation_service
+            .check_readiness(
+                database_session,
+                report_id,
+            )
+        )
+    except (
+        ReportFinalisationServiceError
+    ) as error:
+        raise_finalisation_http_error(
+            error,
+        )
+
+
+@router.post(
+    (
+        "/financial-reports/"
+        "{report_id}/finalise"
+    ),
+    response_model=(
+        FinaliseFinancialReportResponse
+    ),
+)
+def finalise_financial_report(
+    report_id: str,
+    payload:
+        FinaliseFinancialReportRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> FinaliseFinancialReportResponse:
+    try:
+        return (
+            report_finalisation_service
+            .finalise_report(
+                database_session,
+                report_id=report_id,
+                payload=payload,
+            )
+        )
+    except (
+        ReportFinalisationServiceError
+    ) as error:
+        raise_finalisation_http_error(
+            error,
+        )
+
+
+@router.get(
+    (
+        "/financial-reports/"
+        "{report_id}/versions"
+    ),
+    response_model=(
+        FinancialReportVersionListResponse
+    ),
+)
+def list_financial_report_versions(
+    report_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> FinancialReportVersionListResponse:
+    try:
+        return (
+            report_finalisation_service
+            .list_versions(
+                database_session,
+                report_id,
+            )
+        )
+    except (
+        ReportFinalisationServiceError
+    ) as error:
+        raise_finalisation_http_error(
+            error,
+        )
+
+
+@router.get(
+    (
+        "/financial-report-versions/"
+        "{version_id}"
+    ),
+    response_model=(
+        FinancialReportVersionResponse
+    ),
+)
+def get_financial_report_version(
+    version_id: str,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> FinancialReportVersionResponse:
+    try:
+        return (
+            report_finalisation_service
+            .get_version(
+                database_session,
+                version_id,
+            )
+        )
+    except (
+        ReportFinalisationServiceError
+    ) as error:
+        raise_finalisation_http_error(
+            error,
+        )
+
+
+@router.post(
+    (
+        "/financial-reports/"
+        "{report_id}/revisions"
+    ),
+    response_model=(
+        FinancialReportResponse
+    ),
+    status_code=(
+        status.HTTP_201_CREATED
+    ),
+)
+def create_financial_report_revision(
+    report_id: str,
+    payload:
+        CreateFinancialReportRevisionRequest,
+    database_session: Session = Depends(
+        get_db,
+    ),
+) -> FinancialReportResponse:
+    try:
+        report = (
+            report_finalisation_service
+            .create_revision(
+                database_session,
+                report_id=report_id,
+                payload=payload,
+            )
+        )
+    except (
+        ReportFinalisationServiceError
+    ) as error:
+        raise_finalisation_http_error(
+            error,
+        )
+
+    return FinancialReportResponse.model_validate(
+        report,
+    )
+===== READINESS AND SNAPSHOT METHODS =====
+226:    def check_readiness(
+301:            tax_reconciliation = (
+313:        tax_calculation_count = len(
+314:            tax_reconciliation.calculations,
+317:        draft_tax_calculation_count = sum(
+320:            in tax_reconciliation.calculations
+325:        tax_reconciliation_status = (
+326:            tax_reconciliation.status.value
+372:        if tax_calculation_count == 0:
+388:        if draft_tax_calculation_count > 0:
+398:                        f"{draft_tax_calculation_count} tax "
+406:            tax_reconciliation_status
+420:                        f"{tax_reconciliation.difference:.2f}. "
+428:            tax_reconciliation_status
+442:                        f"{abs(tax_reconciliation.difference):.2f}. "
+506:                tax_calculation_count=(
+507:                    tax_calculation_count
+509:                draft_tax_calculation_count=(
+510:                    draft_tax_calculation_count
+512:                tax_reconciliation_status=(
+513:                    tax_reconciliation_status
+515:                tax_reconciliation_difference=(
+516:                    tax_reconciliation.difference
+524:    def build_snapshot(
+574:            tax_reconciliation = (
+915:            "tax_reconciliation": (
+916:                tax_reconciliation.model_dump(
+
+===== SERVICE READINESS SECTION =====
+        try:
+            report = self.repository.get_report(
+                database_session,
+                report_id,
+            )
+        except SQLAlchemyError as error:
+            raise ReportFinalisationPersistenceError(
+                "The financial report could not be retrieved.",
+            ) from error
+
+        if report is None:
+            raise ReportFinalisationNotFoundError(
+                "The financial report was not found.",
+            )
+
+        return report
+
+    def require_version(
+        self,
+        database_session: Session,
+        version_id: str,
+    ) -> FinancialReportVersion:
+        try:
+            version = self.repository.get_version(
+                database_session,
+                version_id,
+            )
+        except SQLAlchemyError as error:
+            raise ReportFinalisationPersistenceError(
+                "The report version could not be retrieved.",
+            ) from error
+
+        if version is None:
+            raise ReportFinalisationNotFoundError(
+                "The report version was not found.",
+            )
+
+        return version
+
+    def clean_required_text(
+        self,
+        value: str,
+        field_name: str,
+    ) -> str:
+        cleaned = value.strip()
+
+        if not cleaned:
+            raise ReportFinalisationValidationError(
+                f"{field_name} is required.",
+            )
+
+        return cleaned
+
+    def clean_optional_text(
+        self,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        cleaned = value.strip()
+
+        return cleaned or None
+
+    def version_summary(
+        self,
+        version: FinancialReportVersion,
+    ) -> FinancialReportVersionSummary:
+        return (
+            FinancialReportVersionSummary
+            .model_validate(
+                version,
+            )
+        )
+
+    def check_readiness(
+        self,
+        database_session: Session,
+        report_id: str,
+    ) -> ReportFinalisationReadinessResponse:
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        blockers: list[
+            FinalisationCheck
+        ] = []
+
+        warnings: list[
+            FinalisationCheck
+        ] = []
+
+        if (
+            report.status
+            in LOCKED_REPORT_STATUSES
+        ):
+            blockers.append(
+                FinalisationCheck(
+                    code="report_locked",
+                    title=(
+                        "Report is already locked"
+                    ),
+                    detail=(
+                        "A finalised, printed or archived "
+                        "report cannot be finalised again."
+                    ),
+                ),
+            )
+
+        try:
+            draft_entry_count = (
+                self.repository
+                .count_entries_by_status(
+                    database_session,
+                    report_id=report.id,
+                    entry_status="draft",
+                )
+            )
+
+            posted_entry_count = (
+                self.repository
+                .count_entries_by_status(
+                    database_session,
+                    report_id=report.id,
+                    entry_status="posted",
+                )
+            )
+
+            active_note_count = (
+                self.repository
+                .count_active_notes(
+                    database_session,
+                    report.id,
+                )
+            )
+
+            trial_balance = (
+                self.journal_entry_service
+                .calculate_trial_balance(
+                    database_session,
+                    report_id=report.id,
+                    as_of=report.period_end,
+                )
+            )
+        except SQLAlchemyError as error:
+            raise ReportFinalisationPersistenceError(
+                "Finalisation readiness could not be calculated.",
+            ) from error
+        try:
+            tax_reconciliation = (
+                self.tax_configuration_service
+                .get_reconciliation(
+                    database_session,
+                    report.id,
+                )
+            )
+        except TaxConfigurationServiceError as error:
+            raise ReportFinalisationPersistenceError(
+                "Tax finalisation readiness could not be calculated.",
+            ) from error
+
+        tax_calculation_count = len(
+            tax_reconciliation.calculations,
+        )
+
+        draft_tax_calculation_count = sum(
+            1
+            for calculation
+            in tax_reconciliation.calculations
+            if calculation.status.value
+            == "draft"
+        )
+
+        tax_reconciliation_status = (
+            tax_reconciliation.status.value
+        )
+
+        if posted_entry_count == 0:
+            blockers.append(
+                FinalisationCheck(
+                    code="no_posted_entries",
+                    title=(
+                        "No posted journal entries"
+                    ),
+                    detail=(
+                        "Post at least one complete journal "
+                        "entry before finalising the report."
+                    ),
+                ),
+            )
+
+        if draft_entry_count > 0:
+            blockers.append(
+                FinalisationCheck(
+                    code="draft_entries_exist",
+                    title=(
+                        "Draft journal entries remain"
+                    ),
+                    detail=(
+                        f"{draft_entry_count} draft journal "
+                        "entry or entries must be posted or "
+                        "removed before finalisation."
+                    ),
+                ),
+            )
+
+        if not trial_balance.is_balanced:
+            blockers.append(
+                FinalisationCheck(
+                    code="trial_balance_unbalanced",
+                    title=(
+                        "Trial Balance is not balanced"
+                    ),
+                    detail=(
+                        "Total debit balances must equal "
+                        "total credit balances."
+                    ),
+                ),
+            )
+        
+        if tax_calculation_count == 0:
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_not_configured",
+                    title=(
+                        "Tax has not been configured"
+                    ),
+                    detail=(
+                        "No tax calculation has been recorded "
+                        "for this report. Review whether tax "
+                        "configuration is required before "
+                        "finalisation."
+                    ),
+                ),
+            )
+
+        if draft_tax_calculation_count > 0:
+            warnings.append(
+                FinalisationCheck(
+                    code=(
+                        "draft_tax_calculations"
+                    ),
+                    title=(
+                        "Draft tax calculations remain"
+                    ),
+                    detail=(
+                        f"{draft_tax_calculation_count} tax "
+                        "calculation or calculations remain "
+                        "in draft status."
+                    ),
+                ),
+            )
+
+        if (
+            tax_reconciliation_status
+            == "under_posted"
+        ):
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_under_posted",
+                    title=(
+                        "Calculated tax exceeds "
+                        "ledger taxation"
+                    ),
+                    detail=(
+                        "Configured taxation exceeds "
+                        "the taxation posted to the ledger "
+                        f"by {report.currency} "
+                        f"{tax_reconciliation.difference:.2f}. "
+                        "Review or post the outstanding "
+                        "tax adjustment."
+                    ),
+                ),
+            )
+
+        elif (
+            tax_reconciliation_status
+            == "over_posted"
+        ):
+            warnings.append(
+                FinalisationCheck(
+                    code="tax_over_posted",
+                    title=(
+                        "Ledger taxation exceeds "
+                        "calculated tax"
+                    ),
+                    detail=(
+                        "Taxation posted to the ledger "
+                        "exceeds configured taxation by "
+                        f"{report.currency} "
+                        f"{abs(tax_reconciliation.difference):.2f}. "
+                        "Review existing tax entries manually."
+                    ),
+                ),
+            )
+
+        if active_note_count == 0:
+            warnings.append(
+                FinalisationCheck(
+                    code="no_active_notes",
+                    title=(
+                        "No active disclosures"
+                    ),
+                    detail=(
+                        "The report can be finalised, but it "
+                        "does not currently contain active "
+                        "notes or accounting policies."
+                    ),
+                ),
+            )
+
+        if not (
+            report.accountant_report_text
+            and report
+            .accountant_report_text
+            .strip()
+        ):
+            warnings.append(
+                FinalisationCheck(
+                    code=(
+                        "no_accountant_report_text"
+                    ),
+                    title=(
+                        "Accountant report is empty"
+                    ),
+                    detail=(
+                        "Consider adding the accountant's "
+                        "report or preparation statement "
+                        "before finalisation."
+                    ),
+                ),
+            )
+
+        return (
+            ReportFinalisationReadinessResponse(
+                financial_report_id=(
+                    report.id
+                ),
+                report_status=report.status,
+                can_finalise=(
+                    len(blockers) == 0
+                ),
+                posted_entry_count=(
+                    posted_entry_count
+                ),
+                draft_entry_count=(
+                    draft_entry_count
+                ),
+                active_note_count=(
+                    active_note_count
+                ),
+                trial_balance_is_balanced=(
+                    trial_balance.is_balanced
+                ),
+                tax_calculation_count=(
+                    tax_calculation_count
+                ),
+                draft_tax_calculation_count=(
+                    draft_tax_calculation_count
+                ),
+                tax_reconciliation_status=(
+                    tax_reconciliation_status
+                ),
+                tax_reconciliation_difference=(
+                    tax_reconciliation.difference
+                ),
+                blockers=blockers,
+                warnings=warnings,
+                checked_at=utc_now(),
+            )
+        )
+
+    def build_snapshot(
+        self,
+        database_session: Session,
+        report: FinancialReport,
+        *,
+        accountant_name: str,
+        finalised_by: str,
+        approval_notes: str | None,
+        finalised_at: datetime,
+    ) -> dict[str, Any]:
+        company = self.repository.get_company(
+            database_session,
+            report.company_id,
+        )
+
+        if company is None:
+            raise ReportFinalisationNotFoundError(
+                "The report company was not found.",
+            )
+
+        accounts = (
+            self.repository
+            .list_ledger_accounts(
+                database_session,
+                report.company_id,
+            )
+        )
+
+        entries = (
+            self.repository
+            .list_journal_entries(
+                database_session,
+                report.id,
+            )
+        )
+
+        notes = self.repository.list_notes(
+            database_session,
+            report.id,
+        )
+
+        tax_calculations = (
+            self.repository
+            .list_tax_calculations(
+                database_session,
+                report.id,
+            )
+        )
+
+        try:
+            tax_reconciliation = (
+                self.tax_configuration_service
+                .get_reconciliation(
+                    database_session,
+                    report.id,
+                )
+            )
+
+===== SERVICE SNAPSHOT SECTION =====
+            database_session,
+            report.id,
+        )
+
+        tax_calculations = (
+            self.repository
+            .list_tax_calculations(
+                database_session,
+                report.id,
+            )
+        )
+
+        try:
+            tax_reconciliation = (
+                self.tax_configuration_service
+                .get_reconciliation(
+                    database_session,
+                    report.id,
+                )
+            )
+        except TaxConfigurationServiceError as error:
+            raise ReportFinalisationPersistenceError(
+                "Tax reconciliation could not be included in the report snapshot.",
+            ) from error
+
+        trial_balance = (
+            self.journal_entry_service
+            .calculate_trial_balance(
+                database_session,
+                report_id=report.id,
+                as_of=report.period_end,
+            )
+        )
+
+        snapshot: dict[str, Any] = {
+            "snapshot_format_version": 2,
+            "finalisation": {
+                "finalised_at": (
+                    finalised_at.isoformat()
+                ),
+                "finalised_by": finalised_by,
+                "accountant_name": (
+                    accountant_name
+                ),
+                "approval_notes": (
+                    approval_notes
+                ),
+            },
+            "company": {
+                "id": company.id,
+                "name": company.name,
+                "business_type": (
+                    company.business_type
+                ),
+                "registration_number": (
+                    company
+                    .registration_number
+                ),
+                "tin": company.tin,
+                "address": company.address,
+                "telephone": (
+                    company.telephone
+                ),
+                "email": company.email,
+                "default_currency": (
+                    company
+                    .default_currency
+                ),
+                "reporting_basis": (
+                    company.reporting_basis
+                ),
+                "logo_path": (
+                    company.logo_path
+                ),
+            },
+            "financial_report": {
+                "id": report.id,
+                "company_id": (
+                    report.company_id
+                ),
+                "comparison_report_id": (
+                    report
+                    .comparison_report_id
+                ),
+                "revision_series_id": (
+                    report
+                    .revision_series_id
+                ),
+                "revision_number": (
+                    report.revision_number
+                ),
+                "supersedes_report_id": (
+                    report
+                    .supersedes_report_id
+                ),
+                "revision_reason": (
+                    report.revision_reason
+                ),
+                "title": report.title,
+                "report_type": (
+                    report.report_type
+                ),
+                "period_start": (
+                    report
+                    .period_start
+                    .isoformat()
+                ),
+                "period_end": (
+                    report
+                    .period_end
+                    .isoformat()
+                ),
+                "financial_year": (
+                    report.financial_year
+                ),
+                "currency": (
+                    report.currency
+                ),
+                "business_template": (
+                    report
+                    .business_template
+                ),
+                "status": "finalised",
+                "accountant_report_text": (
+                    report
+                    .accountant_report_text
+                ),
+                "accountant_name": (
+                    accountant_name
+                ),
+                "finalised_by": (
+                    finalised_by
+                ),
+                "finalised_at": (
+                    finalised_at.isoformat()
+                ),
+            },
+            "ledger_accounts": [
+                {
+                    "id": account.id,
+                    "company_id": (
+                        account.company_id
+                    ),
+                    "parent_account_id": (
+                        account
+                        .parent_account_id
+                    ),
+                    "account_code": (
+                        account.account_code
+                    ),
+                    "account_name": (
+                        account.account_name
+                    ),
+                    "account_type": (
+                        account.account_type
+                    ),
+                    "report_category": (
+                        account
+                        .report_category
+                    ),
+                    "cash_flow_category": (
+                        account
+                        .cash_flow_category
+                    ),
+                    "normal_balance": (
+                        account
+                        .normal_balance
+                    ),
+                    "description": (
+                        account.description
+                    ),
+                    "is_system_account": (
+                        account
+                        .is_system_account
+                    ),
+                    "is_cash_equivalent": (
+                        account
+                        .is_cash_equivalent
+                    ),
+                    "is_active": (
+                        account.is_active
+                    ),
+                    "display_order": (
+                        account
+                        .display_order
+                    ),
+                }
+                for account in accounts
+            ],
+            "journal_entries": [
+                {
+                    "id": entry.id,
+                    "company_id": (
+                        entry.company_id
+                    ),
+                    "financial_report_id": (
+                        entry
+                        .financial_report_id
+                    ),
+                    "sequence_number": (
+                        entry
+                        .sequence_number
+                    ),
+                    "entry_number": (
+                        entry.entry_number
+                    ),
+                    "entry_date": (
+                        entry.entry_date
+                        .isoformat()
+                    ),
+                    "entry_type": (
+                        entry.entry_type
+                    ),
+                    "status": entry.status,
+                    "source": entry.source,
+                    "description": (
+                        entry.description
+                    ),
+                    "reference": (
+                        entry.reference
+                    ),
+                    "posted_at": (
+                        entry.posted_at
+                        .isoformat()
+                        if entry.posted_at
+                        else None
+                    ),
+                    "voided_at": (
+                        entry.voided_at
+                        .isoformat()
+                        if entry.voided_at
+                        else None
+                    ),
+                    "void_reason": (
+                        entry.void_reason
+                    ),
+                    "lines": [
+                        {
+                            "id": line.id,
+                            "ledger_account_id": (
+                                line
+                                .ledger_account_id
+                            ),
+                            "line_number": (
+                                line
+                                .line_number
+                            ),
+                            "description": (
+                                line.description
+                            ),
+                            "debit": (
+                                serialise_snapshot_value(
+                                    line.debit,
+                                )
+                            ),
+                            "credit": (
+                                serialise_snapshot_value(
+                                    line.credit,
+                                )
+                            ),
+                        }
+                        for line in sorted(
+                            entry.lines,
+                            key=lambda item:
+                                item.line_number,
+                        )
+                    ],
+                }
+                for entry in entries
+            ],
+            "tax_calculations": [
+                {
+                    "id": calculation.id,
+                    "financial_report_id": (
+                        calculation
+                        .financial_report_id
+                    ),
+                    "tax_rule_id": (
+                        calculation.tax_rule_id
+                    ),
+                    "calculation_date": (
+                        calculation
+                        .calculation_date
+                        .isoformat()
+                    ),
+                    "tax_base": (
+                        serialise_snapshot_value(
+                            calculation.tax_base,
+                        )
+                    ),
+                    "tax_amount": (
+                        serialise_snapshot_value(
+                            calculation.tax_amount,
+                        )
+                    ),
+                    "currency": (
+                        calculation.currency
+                    ),
+                    "rule_code_snapshot": (
+                        calculation
+                        .rule_code_snapshot
+                    ),
+                    "rule_name_snapshot": (
+                        calculation
+                        .rule_name_snapshot
+                    ),
+                    "tax_type_snapshot": (
+                        calculation
+                        .tax_type_snapshot
+                    ),
+                    "calculation_method_snapshot": (
+                        calculation
+                        .calculation_method_snapshot
+                    ),
+                    "rate_applied": (
+                        serialise_snapshot_value(
+                            calculation
+                            .rate_applied,
+                        )
+                        if (
+                            calculation
+                            .rate_applied
+                            is not None
+                        )
+                        else None
+                    ),
+                    "fixed_amount_applied": (
+                        serialise_snapshot_value(
+                            calculation
+                            .fixed_amount_applied,
+                        )
+                        if (
+                            calculation
+                            .fixed_amount_applied
+                            is not None
+                        )
+                        else None
+                    ),
+                    "calculation_details_json": (
+                        calculation
+                        .calculation_details_json
+                    ),
+                    "status": (
+                        calculation.status
+                    ),
+                    "calculated_at": (
+                        calculation
+                        .calculated_at
+                        .isoformat()
+                    ),
+                }
+                for calculation
+                in tax_calculations
+            ],
+            "tax_reconciliation": (
+                tax_reconciliation.model_dump(
+                    mode="json",
+                    exclude={
+                        "calculations",
+                        "generated_at",
+                    },
+                )
+            ),
+            "trial_balance": (
+                trial_balance.model_dump(
+                    mode="json",
+                )
+            ),
+        }
+
+        return snapshot
+
+    def finalise_report(
+        self,
+        database_session: Session,
+        *,
+        report_id: str,
+        payload:
+            FinaliseFinancialReportRequest,
+    ) -> FinaliseFinancialReportResponse:
+        report = self.require_report(
+            database_session,
+            report_id,
+        )
+
+        readiness = self.check_readiness(
+            database_session,
+            report_id,
+        )
+
+        if not readiness.can_finalise:
+            blocker_details = "; ".join(
+                blocker.detail
+                for blocker
+                in readiness.blockers
+            )
+
+            raise (
+                ReportFinalisationValidationError(
+                    blocker_details
+                    or (
+                        "The report is not ready "
+                        "for finalisation."
+                    ),
+                )
+            )
+
+        existing_version = (
+            self.repository
+            .get_version_by_report(
+                database_session,
+                report.id,
+            )
+        )
+
+        if existing_version is not None:
+            raise ReportFinalisationConflictError(
+                "This report already has a finalised version.",
+            )
+
+        accountant_name = (
+            self.clean_required_text(
+                payload.accountant_name,
+                "Accountant name",
+            )
+        )
+
+        finalised_by = (
+            self.clean_required_text(
+                payload.finalised_by,
+                "Finalised by",
+            )
+        )
+
+        approval_notes = (
+            self.clean_optional_text(
+                payload.approval_notes,
+            )
+        )
+
+        finalised_at = utc_now()
+
+        revision_series_id = (
+            report.revision_series_id
+            or report.id
+        )
+
+        report.revision_series_id = (
+            revision_series_id
+        )
+
+        report.accountant_name = (
+            accountant_name
+        )
+
+        report.finalised_by = (
+            finalised_by
+        )
+
+        report.finalised_at = (
+            finalised_at
+        )
+
+        report.status = "finalised"
+
+        snapshot = self.build_snapshot(
+            database_session,
+            report,
+            accountant_name=(
+                accountant_name
+            ),
+            finalised_by=finalised_by,
+            approval_notes=approval_notes,
+            finalised_at=finalised_at,
+        )
+
+        snapshot_json = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(
+                ",",
+                ":",
+            ),
+        )
+
+        snapshot_checksum = sha256(
+            snapshot_json.encode(
+                "utf-8",
+            ),
+        ).hexdigest()
+
+        version = FinancialReportVersion(
+            financial_report_id=report.id,
+            revision_series_id=(
+                revision_series_id
+            ),
+            revision_number=(
+                report.revision_number
+            ),
+            finalised_at=finalised_at,
+            finalised_by=finalised_by,
+            accountant_name=(
+                accountant_name
+            ),
+            approval_notes=approval_notes,
+            snapshot_json=snapshot_json,
+            snapshot_checksum=(
+                snapshot_checksum
+            ),
+        )
+
+        database_session.add(report)
+        database_session.add(version)
+
+        try:
+            database_session.commit()
+
+            database_session.refresh(
+                report,
+
+===== FINALISATION TAX TESTS =====
+878:def test_tax_readiness_and_snapshot_are_preserved(
+936:            "tax_reconciliation_status"
+952:        "draft_tax_calculations"
+1001:        snapshot["tax_calculations"],
+1006:            "tax_calculations"
+1013:            "tax_reconciliation"
+1020:            "tax_reconciliation"
+1026:def test_revision_copies_tax_calculations(
+
+===== FINALISATION TEST SECTION =====
+                    == revision["id"],
+                ),
+            )
+            or 0
+        )
+    finally:
+        database_session.close()
+
+    assert copied_entry_count == 1
+    assert copied_note_count == 1
+
+
+def test_only_one_direct_revision_can_be_created(
+    test_context,
+) -> None:
+    client, session_factory = (
+        test_context
+    )
+
+    company, report = (
+        create_company_and_report(
+            client,
+        )
+    )
+
+    seed_balanced_report(
+        session_factory,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    assert finalise_report(
+        client,
+        str(report["id"]),
+    ).status_code == 200
+
+    first_revision = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}/revisions"
+        ),
+        json={
+            "revision_reason":
+                "First revision.",
+        },
+    )
+
+    assert (
+        first_revision.status_code
+        == 201
+    )
+
+    second_revision = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}/revisions"
+        ),
+        json={
+            "revision_reason":
+                "Duplicate revision.",
+        },
+    )
+
+    assert (
+        second_revision.status_code
+        == 409
+    )
+
+def configure_report_tax(
+    client: TestClient,
+    *,
+    company_id: str,
+    report_id: str,
+) -> dict[str, object]:
+    chart_response = client.post(
+        (
+            f"/api/companies/{company_id}"
+            "/chart-of-accounts/initialize"
+        ),
+    )
+
+    assert chart_response.status_code == 200
+
+    profile_response = client.post(
+        "/api/tax-profiles",
+        json={
+            "company_id": company_id,
+            "profile_code":
+                "FINALISATION-TAX",
+            "profile_name":
+                "Finalisation Tax Profile",
+            "jurisdiction_country_code":
+                "GH",
+            "jurisdiction_name":
+                "Ghana",
+            "is_default": True,
+            "is_active": True,
+        },
+    )
+
+    assert (
+        profile_response.status_code
+        == 201
+    )
+
+    profile = profile_response.json()
+
+    rule_response = client.post(
+        (
+            f"/api/tax-profiles/"
+            f"{profile['id']}/rules"
+        ),
+        json={
+            "rule_code":
+                "CIT-FINALISATION",
+            "rule_name":
+                "Finalisation Income Tax",
+            "tax_type":
+                "corporate_income_tax",
+            "calculation_method":
+                "percentage",
+            "rate_percentage":
+                "25.000000",
+            "fixed_amount": None,
+            "currency": "GHS",
+            "effective_from":
+                "2025-01-01",
+            "effective_to": None,
+            "display_order": 10,
+        },
+    )
+
+    assert rule_response.status_code == 201
+
+    rule = rule_response.json()
+
+    activation_response = client.post(
+        (
+            f"/api/tax-rules/"
+            f"{rule['id']}/activate"
+        ),
+    )
+
+    assert (
+        activation_response.status_code
+        == 200
+    )
+
+    calculation_response = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report_id}"
+            "/tax-calculations"
+        ),
+        json={
+            "tax_profile_id":
+                profile["id"],
+            "rule_code":
+                "CIT-FINALISATION",
+            "calculation_date":
+                "2025-12-31",
+            "tax_base": "1000.00",
+        },
+    )
+
+    assert (
+        calculation_response.status_code
+        == 201
+    )
+
+    return calculation_response.json()
+
+
+def test_tax_readiness_and_snapshot_are_preserved(
+    test_context,
+) -> None:
+    client, session_factory = (
+        test_context
+    )
+
+    company, report = (
+        create_company_and_report(
+            client,
+        )
+    )
+
+    seed_balanced_report(
+        session_factory,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    calculation = configure_report_tax(
+        client,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    readiness_response = client.get(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}"
+            "/finalisation-readiness"
+        ),
+    )
+
+    assert (
+        readiness_response.status_code
+        == 200
+    )
+
+    readiness = readiness_response.json()
+
+    assert readiness[
+        "tax_calculation_count"
+    ] == 1
+
+    assert readiness[
+        "draft_tax_calculation_count"
+    ] == 1
+
+    assert (
+        readiness[
+            "tax_reconciliation_status"
+        ]
+        == "under_posted"
+    )
+
+    assert readiness[
+        "can_finalise"
+    ] is True
+
+    warning_codes = {
+        warning["code"]
+        for warning
+        in readiness["warnings"]
+    }
+
+    assert (
+        "draft_tax_calculations"
+        in warning_codes
+    )
+
+    assert (
+        "tax_under_posted"
+        in warning_codes
+    )
+
+    finalise_response = finalise_report(
+        client,
+        str(report["id"]),
+    )
+
+    assert (
+        finalise_response.status_code
+        == 200
+    )
+
+    version_id = (
+        finalise_response.json()[
+            "version"
+        ]["id"]
+    )
+
+    version_response = client.get(
+        (
+            "/api/financial-report-versions/"
+            f"{version_id}"
+        ),
+    )
+
+    assert (
+        version_response.status_code
+        == 200
+    )
+
+    snapshot = version_response.json()[
+        "snapshot"
+    ]
+
+    assert (
+        snapshot[
+            "snapshot_format_version"
+        ]
+        == 2
+    )
+
+    assert len(
+        snapshot["tax_calculations"],
+    ) == 1
+
+    assert (
+        snapshot[
+            "tax_calculations"
+        ][0]["id"]
+        == calculation["id"]
+    )
+
+    assert (
+        snapshot[
+            "tax_reconciliation"
+        ]["status"]
+        == "under_posted"
+    )
+
+    assert (
+        snapshot[
+            "tax_reconciliation"
+        ]["difference"]
+        == "250.00"
+    )
+
+
+def test_revision_copies_tax_calculations(
+    test_context,
+) -> None:
+    client, session_factory = (
+        test_context
+    )
+
+    company, report = (
+        create_company_and_report(
+            client,
+        )
+    )
+
+    seed_balanced_report(
+        session_factory,
+        company_id=str(
+            company["id"],
+        ),
+        report_id=str(
+            report["id"],
+        ),
+    )
+
+    source_calculation = (
+        configure_report_tax(
+            client,
+            company_id=str(
+                company["id"],
+            ),
+            report_id=str(
+                report["id"],
+            ),
+        )
+    )
+
+    assert finalise_report(
+        client,
+        str(report["id"]),
+    ).status_code == 200
+
+    revision_response = client.post(
+        (
+            f"/api/financial-reports/"
+            f"{report['id']}/revisions"
+        ),
+        json={
+            "revision_reason":
+                "Review the tax calculation.",
+        },
+    )
+
+    assert (
+        revision_response.status_code
+        == 201
+    )
+
+    revision = revision_response.json()
+
+    database_session = (
+        session_factory()
+    )
+
+    try:
+        copied_calculations = list(
+            database_session.scalars(
+                select(
+                    TaxCalculation,
+                )
+                .where(
+                    TaxCalculation
+                    .financial_report_id
+                    == revision["id"],
+                ),
+            ).all(),
+        )
+    finally:
+        database_session.close()
+
+    assert len(copied_calculations) == 1
+
+    copied_calculation = (
+        copied_calculations[0]
+    )
+
+    assert (
+        copied_calculation.tax_amount
+        == Decimal("250.00")
+    )
+
+    assert (
+        copied_calculation.status
+        == "draft"
+    )
+
+    assert (
+        copied_calculation.tax_rule_id
+        == source_calculation[
+            "tax_rule_id"
+        ]
+    )
+
+    copied_details = json.loads(
+        copied_calculation
+        .calculation_details_json
+        or "{}",
+    )
+
+    assert (
+        copied_details[
+            "copied_from_tax_calculation_id"
+        ]
+        == source_calculation["id"]
+    )
+
+    assert (
+        copied_details[
+            "copied_from_report_id"
+        ]
+        == report["id"]
+    )
