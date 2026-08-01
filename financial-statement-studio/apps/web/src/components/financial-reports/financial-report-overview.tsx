@@ -522,10 +522,31 @@ export function FinancialReportOverview({
     </Link>
 
     <Link
+  className="report-launch-card report-launch-card--statement"
+  href={`/reports/${report.id}/statements/tax-computation`}
+>
+  <span>10</span>
+
+  <h3>
+    Tax Computation Report
+  </h3>
+
+  <p>
+    Review and print tax calculations,
+    taxpayer information, reconciliation
+    and controlled posting history.
+  </p>
+
+  <strong>
+    View tax report →
+  </strong>
+</Link>
+
+    <Link
   className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
   href={`/reports/${report.id}/finalisation`}
 >
-  <span>10</span>
+  <span>11</span>
 
   <h3>
     Finalisation and Versions
