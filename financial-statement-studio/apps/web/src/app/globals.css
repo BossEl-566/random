@@ -7754,3 +7754,118 @@ button:disabled {
     break-inside: avoid;
   }
 }
+/* =========================================================
+   Complete Report — Incomplete Sections
+   ========================================================= */
+
+.complete-report-incomplete-section {
+  padding: 28px;
+  border: 1px solid #fecdca;
+  background: #fffbfa;
+}
+
+.complete-report-incomplete-section > span {
+  display: inline-block;
+  margin-bottom: 10px;
+  color: #b42318;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.complete-report-incomplete-section h2 {
+  margin: 0 0 12px;
+  color: #101828;
+  font-size: 1.25rem;
+}
+
+.complete-report-incomplete-section p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.7;
+}
+
+.complete-report-incomplete-list {
+  display: grid;
+  gap: 10px;
+  margin: 22px 0;
+}
+
+.complete-report-incomplete-list > div {
+  padding: 14px 16px;
+  border: 1px solid #fecdca;
+  background: #ffffff;
+}
+
+.complete-report-incomplete-list strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #b42318;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.complete-report-incomplete-list p {
+  font-size: 0.78rem;
+}
+
+@media print {
+  .complete-report-incomplete-section,
+  .complete-report-incomplete-list > div {
+    break-inside: avoid;
+  }
+
+  .cash-flow-reconciliation {
+    break-inside: avoid;
+  }
+}
+/* =========================================================
+   Complete Report — Notes and Disclosures
+   ========================================================= */
+
+.complete-report-notes-sheet {
+  overflow: visible;
+}
+
+.complete-report-notes-body {
+  display: grid;
+  gap: 30px;
+}
+
+.complete-report-note {
+  margin: 0;
+}
+
+.complete-report-note + .complete-report-note {
+  padding-top: 28px;
+  border-top: 1px solid #e4e7ec;
+}
+
+.complete-report-notes-empty-followup {
+  margin-top: 16px !important;
+}
+
+@media print {
+  .complete-report-notes-sheet {
+    overflow: visible;
+  }
+
+  .complete-report-note {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .complete-report-note > header,
+  .complete-report-note > footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .complete-report-note
+    .printable-report-note__content
+    p {
+    orphans: 3;
+    widows: 3;
+  }
+}

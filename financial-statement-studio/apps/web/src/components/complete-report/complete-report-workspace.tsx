@@ -36,6 +36,32 @@ import type {
   ProfitOrLossStatement,
   StatementOfFinancialPosition,
 } from "@/types/financial-statement";
+import { EquityAccountTable } from "@/components/financial-statements/equity-account-table";
+import { EquityMovementSection } from "@/components/financial-statements/equity-movement-section";
+import {
+  getStatementOfChangesInEquity,
+} from "@/lib/equity-statements-api";
+import type {
+  StatementOfChangesInEquity,
+} from "@/types/equity-statement";
+import { CashFlowSection } from "@/components/financial-statements/cash-flow-section";
+import {
+  getCashFlowReadiness,
+  getStatementOfCashFlows,
+} from "@/lib/cash-flow-api";
+import type {
+  CashFlowReadiness,
+  CashFlowStatementSection,
+  StatementOfCashFlows,
+} from "@/types/cash-flow";
+import {
+  listFinancialReportNotes,
+} from "@/lib/notes-api";
+import {
+  NOTE_TYPE_LABELS,
+  STATEMENT_NAME_LABELS,
+  type FinancialReportNote,
+} from "@/types/notes";
 
 type CompleteReportWorkspaceProps = {
   reportId: string;
@@ -151,6 +177,36 @@ export function CompleteReportWorkspace({
     useState<StatementOfFinancialPosition | null>(
       null,
     );
+      const [
+    changesInEquity,
+    setChangesInEquity,
+  ] =
+    useState<StatementOfChangesInEquity | null>(
+      null,
+    );
+
+      const [
+    cashFlowReadiness,
+    setCashFlowReadiness,
+  ] =
+    useState<CashFlowReadiness | null>(
+      null,
+    );
+
+  const [
+    cashFlow,
+    setCashFlow,
+  ] =
+    useState<StatementOfCashFlows | null>(
+      null,
+    );
+    const [
+    notes,
+    setNotes,
+  ] =
+    useState<FinancialReportNote[]>(
+      [],
+    );
 
   const [
     resourceState,
@@ -182,10 +238,13 @@ export function CompleteReportWorkspace({
         async (
           reportResponse,
         ) => {
-                    const [
+          const [
             companyResponse,
             profitOrLossResponse,
             financialPositionResponse,
+            changesInEquityResponse,
+            cashFlowReadinessResponse,
+            notesResponse,
           ] = await Promise.all([
             getCompany(
               reportResponse.company_id,
@@ -198,22 +257,49 @@ export function CompleteReportWorkspace({
             getStatementOfFinancialPosition(
               reportId,
             ),
+
+            getStatementOfChangesInEquity(
+              reportId,
+            ),
+
+            getCashFlowReadiness(
+              reportId,
+            ),
+            listFinancialReportNotes(
+              reportId,
+              false,
+            ),
           ]);
+
+          const cashFlowResponse =
+            cashFlowReadinessResponse.is_ready
+              ? await getStatementOfCashFlows(
+                  reportId,
+                )
+              : null;
 
           return {
             reportResponse,
             companyResponse,
             profitOrLossResponse,
             financialPositionResponse,
+            changesInEquityResponse,
+            cashFlowReadinessResponse,
+            cashFlowResponse,
+            notesResponse,
           };
         },
       )
       .then(
-                     ({
+        ({
           reportResponse,
           companyResponse,
           profitOrLossResponse,
           financialPositionResponse,
+          changesInEquityResponse,
+          cashFlowReadinessResponse,
+          cashFlowResponse,
+          notesResponse,
         }) => {
           if (cancelled) {
             return;
@@ -231,6 +317,19 @@ export function CompleteReportWorkspace({
           );
           setFinancialPosition(
             financialPositionResponse,
+          );
+          setChangesInEquity(
+            changesInEquityResponse,
+          );
+          setCashFlowReadiness(
+            cashFlowReadinessResponse,
+          );
+
+          setCashFlow(
+            cashFlowResponse,
+          );
+          setNotes(
+            notesResponse.items,
           );
 
           setResourceState(
@@ -323,6 +422,38 @@ export function CompleteReportWorkspace({
         ) ?? [],
       );
     }, [financialPosition]);
+      const closingCashSection:
+    CashFlowStatementSection | null =
+    cashFlow
+      ? {
+          key: "cash_accounts",
+          title:
+            "Cash and Cash Equivalents at Period End",
+          items:
+            cashFlow.cash_accounts,
+          total:
+            cashFlow.closing_cash_balance,
+        }
+      : null;
+
+        const activeNotes =
+    useMemo(
+      () =>
+        notes
+          .filter(
+            (note) =>
+              note.is_active,
+          )
+          .sort(
+            (
+              firstNote,
+              secondNote,
+            ) =>
+              firstNote.note_number -
+              secondNote.note_number,
+          ),
+      [notes],
+    );
 
   const isFinal =
     report
@@ -1409,6 +1540,886 @@ export function CompleteReportWorkspace({
               </footer>
             </article>
           ) : null}
+                    {/* STATEMENT OF CHANGES IN EQUITY */}
+          {changesInEquity ? (
+            <article className="complete-report-sheet complete-report-statement-sheet">
+              <header className="complete-report-section-header complete-report-statement-header">
+                <span>
+                  Section 06
+                </span>
+
+                <h1>
+                  Statement of Changes in Equity
+                </h1>
+
+                <p>
+                  For the period{" "}
+                  {formatDate(
+                    changesInEquity.period_start,
+                  )}
+                  {" to "}
+                  {formatDate(
+                    changesInEquity.period_end,
+                  )}
+                </p>
+              </header>
+
+              <div className="complete-report-statement-meta">
+                <div>
+                  <span>
+                    Company
+                  </span>
+
+                  <strong>
+                    {company.name}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {changesInEquity.currency}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="financial-statement-document__body complete-report-statement-body">
+                <div className="financial-position-column-heading">
+                  <span>
+                    Movement in Recorded Equity
+                  </span>
+                </div>
+
+                <div className="equity-opening-line">
+                  <strong>
+                    Opening Recorded Equity
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {changesInEquity.currency}
+                    </span>
+
+                    {formatStatementMoney(
+                      changesInEquity
+                        .opening_recorded_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <EquityMovementSection
+                  currency={
+                    changesInEquity.currency
+                  }
+                  section={
+                    changesInEquity
+                      .direct_increases
+                  }
+                />
+
+                <EquityMovementSection
+                  currency={
+                    changesInEquity.currency
+                  }
+                  section={
+                    changesInEquity
+                      .direct_decreases
+                  }
+                />
+
+                <div className="financial-statement-subtotal">
+                  <strong>
+                    Net Direct Movement in
+                    Equity
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {changesInEquity.currency}
+                    </span>
+
+                    {formatStatementMoney(
+                      changesInEquity
+                        .net_direct_equity_movement,
+                    )}
+                  </strong>
+                </div>
+
+                <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                  <strong>
+                    Recorded Closing Equity
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {changesInEquity.currency}
+                    </span>
+
+                    {formatStatementMoney(
+                      changesInEquity
+                        .recorded_closing_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <div
+                  className={
+                    toNumber(
+                      changesInEquity
+                        .profit_after_tax,
+                    ) >= 0
+                      ? "equity-profit-line equity-profit-line--positive"
+                      : "equity-profit-line equity-profit-line--negative"
+                  }
+                >
+                  <div>
+                    <span>
+                      Financial performance
+                    </span>
+
+                    <strong>
+                      {toNumber(
+                        changesInEquity
+                          .profit_after_tax,
+                      ) >= 0
+                        ? "Profit After Tax"
+                        : "Loss After Tax"}
+                    </strong>
+                  </div>
+
+                  <strong>
+                    <span>
+                      {changesInEquity.currency}
+                    </span>
+
+                    {formatStatementMoney(
+                      changesInEquity
+                        .profit_after_tax,
+                    )}
+                  </strong>
+                </div>
+
+                <div
+                  className={
+                    toNumber(
+                      changesInEquity
+                        .total_closing_equity,
+                    ) >= 0
+                      ? "financial-statement-final-total financial-statement-final-total--positive"
+                      : "financial-statement-final-total financial-statement-final-total--negative"
+                  }
+                >
+                  <div>
+                    <span>
+                      Closing position
+                    </span>
+
+                    <strong>
+                      Total Closing Equity
+                    </strong>
+                  </div>
+
+                  <strong>
+                    <span>
+                      {changesInEquity.currency}
+                    </span>
+
+                    {formatStatementMoney(
+                      changesInEquity
+                        .total_closing_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <EquityAccountTable
+                  statement={
+                    changesInEquity
+                  }
+                />
+
+                <section
+                  className={
+                    changesInEquity
+                      .is_reconciled
+                      ? "financial-position-validation financial-position-validation--balanced"
+                      : "financial-position-validation financial-position-validation--error"
+                  }
+                >
+                  <div>
+                    <span>
+                      Equity reconciliation
+                    </span>
+
+                    <strong>
+                      {changesInEquity
+                        .is_reconciled
+                        ? "Recorded equity movements reconcile"
+                        : "Equity movements require review"}
+                    </strong>
+
+                    <p>
+                      Difference:{" "}
+                      {changesInEquity.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        changesInEquity
+                          .equity_reconciliation_difference,
+                      )}
+                    </p>
+                  </div>
+
+                  <span>
+                    {changesInEquity
+                      .is_reconciled
+                      ? "Reconciled"
+                      : "Review required"}
+                  </span>
+                </section>
+
+                <section className="equity-reconciliation-detail">
+                  <div>
+                    <span>
+                      Calculated recorded
+                      closing equity
+                    </span>
+
+                    <strong>
+                      {changesInEquity.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        changesInEquity
+                          .calculated_recorded_closing_equity,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Actual recorded
+                      closing equity
+                    </span>
+
+                    <strong>
+                      {changesInEquity.currency}
+                      {" "}
+                      {formatStatementMoney(
+                        changesInEquity
+                          .recorded_closing_equity,
+                      )}
+                    </strong>
+                  </div>
+                </section>
+              </div>
+
+              <footer className="complete-report-statement-footer">
+                <span>
+                  Prepared from posted,
+                  non-voided journal entries.
+                  Current-year profit is shown
+                  separately from recorded
+                  equity.
+                </span>
+
+                <span>
+                  Financial Statement Studio
+                </span>
+              </footer>
+            </article>
+          ) : null}
+                    {/* STATEMENT OF CASH FLOWS */}
+          {cashFlowReadiness ? (
+            <article className="complete-report-sheet complete-report-statement-sheet">
+              <header className="complete-report-section-header complete-report-statement-header">
+                <span>
+                  Section 07
+                </span>
+
+                <h1>
+                  Statement of Cash Flows
+                </h1>
+
+                <p>
+                  For the reporting period
+                  ended{" "}
+                  {formatDate(
+                    report.period_end,
+                  )}
+                </p>
+              </header>
+
+              <div className="complete-report-statement-meta">
+                <div>
+                  <span>
+                    Company
+                  </span>
+
+                  <strong>
+                    {company.name}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {cashFlow?.currency ??
+                      report.currency}
+                  </strong>
+                </div>
+              </div>
+
+              {!cashFlowReadiness.is_ready ? (
+                <section className="complete-report-incomplete-section">
+                  <span>
+                    Incomplete section
+                  </span>
+
+                  <h2>
+                    Cash Flow setup is not
+                    complete
+                  </h2>
+
+                  <p>
+                    The Statement of Cash
+                    Flows cannot yet be
+                    calculated because the
+                    required cash-account or
+                    cash-flow classifications
+                    have not been completed.
+                  </p>
+
+                  {cashFlowReadiness.warnings.length >
+                  0 ? (
+                    <div className="complete-report-incomplete-list">
+                      {cashFlowReadiness.warnings.map(
+                        (warning) => (
+                          <div
+                            key={[
+                              warning.code,
+                              warning
+                                .ledger_account_id ??
+                                "general",
+                            ].join("-")}
+                          >
+                            <strong>
+                              {warning.code
+                                .replaceAll(
+                                  "_",
+                                  " ",
+                                )
+                                .toLowerCase()}
+                            </strong>
+
+                            <p>
+                              {
+                                warning.message
+                              }
+                            </p>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+
+                  <p>
+                    This section may be
+                    completed from the
+                    standalone Cash Flows
+                    workspace before final
+                    printing.
+                  </p>
+                </section>
+              ) : cashFlow ? (
+                <div className="financial-statement-document__body complete-report-statement-body">
+                  <div className="financial-position-column-heading">
+                    <span>
+                      Cash Flows from
+                      Operating Activities
+                    </span>
+                  </div>
+
+                  <div className="cash-flow-starting-line">
+                    <strong>
+                      Profit After Tax
+                    </strong>
+
+                    <strong>
+                      <span>
+                        {
+                          cashFlow.currency
+                        }
+                      </span>
+
+                      {formatStatementMoney(
+                        cashFlow
+                          .profit_after_tax,
+                      )}
+                    </strong>
+                  </div>
+
+                  <CashFlowSection
+                    currency={
+                      cashFlow.currency
+                    }
+                    section={
+                      cashFlow
+                        .non_cash_adjustments
+                    }
+                  />
+
+                  <CashFlowSection
+                    currency={
+                      cashFlow.currency
+                    }
+                    section={
+                      cashFlow
+                        .working_capital_adjustments
+                    }
+                  />
+
+                  <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                    <strong>
+                      Net Cash from
+                      Operating Activities
+                    </strong>
+
+                    <strong>
+                      <span>
+                        {
+                          cashFlow.currency
+                        }
+                      </span>
+
+                      {formatStatementMoney(
+                        cashFlow
+                          .net_cash_from_operating_activities,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="financial-position-column-heading">
+                    <span>
+                      Cash Flows from
+                      Investing Activities
+                    </span>
+                  </div>
+
+                  <CashFlowSection
+                    currency={
+                      cashFlow.currency
+                    }
+                    section={
+                      cashFlow
+                        .investing_activities
+                    }
+                  />
+
+                  <div className="financial-statement-subtotal">
+                    <strong>
+                      Net Cash from
+                      Investing Activities
+                    </strong>
+
+                    <strong>
+                      <span>
+                        {
+                          cashFlow.currency
+                        }
+                      </span>
+
+                      {formatStatementMoney(
+                        cashFlow
+                          .net_cash_from_investing_activities,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="financial-position-column-heading">
+                    <span>
+                      Cash Flows from
+                      Financing Activities
+                    </span>
+                  </div>
+
+                  <CashFlowSection
+                    currency={
+                      cashFlow.currency
+                    }
+                    section={
+                      cashFlow
+                        .financing_activities
+                    }
+                  />
+
+                  <div className="financial-statement-subtotal">
+                    <strong>
+                      Net Cash from
+                      Financing Activities
+                    </strong>
+
+                    <strong>
+                      <span>
+                        {
+                          cashFlow.currency
+                        }
+                      </span>
+
+                      {formatStatementMoney(
+                        cashFlow
+                          .net_cash_from_financing_activities,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div
+                    className={
+                      toNumber(
+                        cashFlow
+                          .net_increase_decrease_in_cash,
+                      ) >= 0
+                        ? "financial-statement-final-total financial-statement-final-total--positive"
+                        : "financial-statement-final-total financial-statement-final-total--negative"
+                    }
+                  >
+                    <div>
+                      <span>
+                        Net cash movement
+                      </span>
+
+                      <strong>
+                        {toNumber(
+                          cashFlow
+                            .net_increase_decrease_in_cash,
+                        ) >= 0
+                          ? "Net Increase in Cash"
+                          : "Net Decrease in Cash"}
+                      </strong>
+                    </div>
+
+                    <strong>
+                      <span>
+                        {
+                          cashFlow.currency
+                        }
+                      </span>
+
+                      {formatStatementMoney(
+                        cashFlow
+                          .net_increase_decrease_in_cash,
+                      )}
+                    </strong>
+                  </div>
+
+                  <section className="cash-flow-reconciliation">
+                    <header>
+                      <h3>
+                        Cash Reconciliation
+                      </h3>
+                    </header>
+
+                    <div className="cash-flow-reconciliation__lines">
+                      <div>
+                        <span>
+                          Opening cash and
+                          cash equivalents
+                        </span>
+
+                        <strong>
+                          {
+                            cashFlow.currency
+                          }
+                          {" "}
+                          {formatStatementMoney(
+                            cashFlow
+                              .opening_cash_balance,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Net increase or
+                          decrease in cash
+                        </span>
+
+                        <strong>
+                          {
+                            cashFlow.currency
+                          }
+                          {" "}
+                          {formatStatementMoney(
+                            cashFlow
+                              .net_increase_decrease_in_cash,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>
+                          Calculated closing
+                          cash
+                        </span>
+
+                        <strong>
+                          {
+                            cashFlow.currency
+                          }
+                          {" "}
+                          {formatStatementMoney(
+                            cashFlow
+                              .calculated_closing_cash,
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="cash-flow-reconciliation__closing">
+                        <span>
+                          Actual closing cash
+                          and cash equivalents
+                        </span>
+
+                        <strong>
+                          {
+                            cashFlow.currency
+                          }
+                          {" "}
+                          {formatStatementMoney(
+                            cashFlow
+                              .closing_cash_balance,
+                          )}
+                        </strong>
+                      </div>
+                    </div>
+                  </section>
+
+                  {closingCashSection ? (
+                    <CashFlowSection
+                      currency={
+                        cashFlow.currency
+                      }
+                      section={
+                        closingCashSection
+                      }
+                    />
+                  ) : null}
+
+                  <section
+                    className={
+                      cashFlow.is_reconciled
+                        ? "financial-position-validation financial-position-validation--balanced"
+                        : "financial-position-validation financial-position-validation--error"
+                    }
+                  >
+                    <div>
+                      <span>
+                        Cash reconciliation
+                      </span>
+
+                      <strong>
+                        {cashFlow.is_reconciled
+                          ? "Calculated cash agrees with the ledger"
+                          : "Cash balance does not reconcile"}
+                      </strong>
+
+                      <p>
+                        Difference:{" "}
+                        {cashFlow.currency}
+                        {" "}
+                        {formatStatementMoney(
+                          cashFlow
+                            .cash_reconciliation_difference,
+                        )}
+                      </p>
+                    </div>
+
+                    <span>
+                      {cashFlow.is_reconciled
+                        ? "Reconciled"
+                        : "Review required"}
+                    </span>
+                  </section>
+                </div>
+              ) : null}
+
+              <footer className="complete-report-statement-footer">
+                <span>
+                  Prepared using the indirect
+                  method from posted,
+                  non-voided journal entries.
+                </span>
+
+                <span>
+                  Financial Statement Studio
+                </span>
+              </footer>
+            </article>
+          ) : null}
+                    {/* NOTES AND DISCLOSURES */}
+          <article className="complete-report-sheet complete-report-notes-sheet">
+            <header className="complete-report-section-header complete-report-statement-header">
+              <span>
+                Section 08
+              </span>
+
+              <h1>
+                Notes to the Financial
+                Statements
+              </h1>
+
+              <p>
+                For the reporting period
+                ended{" "}
+                {formatDate(
+                  report.period_end,
+                )}
+              </p>
+            </header>
+
+            <div className="complete-report-statement-meta">
+              <div>
+                <span>
+                  Company
+                </span>
+
+                <strong>
+                  {company.name}
+                </strong>
+              </div>
+
+              <div>
+                <span>
+                  Currency
+                </span>
+
+                <strong>
+                  {report.currency}
+                </strong>
+              </div>
+            </div>
+
+            <div className="complete-report-notes-body">
+              {activeNotes.length > 0 ? (
+                activeNotes.map(
+                  (note) => (
+                    <section
+                      className="printable-report-note complete-report-note"
+                      key={note.id}
+                    >
+                      <header>
+                        <span>
+                          {note.note_number}
+                        </span>
+
+                        <div>
+                          <h2>
+                            {note.title}
+                          </h2>
+
+                          <small>
+                            {
+                              NOTE_TYPE_LABELS[
+                                note.note_type
+                              ]
+                            }
+                          </small>
+                        </div>
+                      </header>
+
+                      <div className="printable-report-note__content">
+                        {note.content ? (
+                          note.content
+                            .split(/\r?\n/)
+                            .map(
+                              (
+                                paragraph,
+                                paragraphIndex,
+                              ) => (
+                                <p
+                                  key={`${note.id}-${paragraphIndex}`}
+                                >
+                                  {paragraph ||
+                                    "\u00A0"}
+                                </p>
+                              ),
+                            )
+                        ) : (
+                          <p>
+                            No disclosure
+                            content has been
+                            entered for this
+                            note.
+                          </p>
+                        )}
+                      </div>
+
+                      {note.statement_name ? (
+                        <footer>
+                          <span>
+                            Related statement
+                          </span>
+
+                          <strong>
+                            {
+                              STATEMENT_NAME_LABELS[
+                                note
+                                  .statement_name
+                              ]
+                            }
+
+                            {note.statement_line_key
+                              ? ` — ${note.statement_line_key}`
+                              : ""}
+                          </strong>
+                        </footer>
+                      ) : null}
+                    </section>
+                  ),
+                )
+              ) : (
+                <section className="complete-report-incomplete-section">
+                  <span>
+                    No disclosures
+                  </span>
+
+                  <h2>
+                    No active notes have
+                    been prepared
+                  </h2>
+
+                  <p>
+                    Accounting policies,
+                    explanatory notes and
+                    supporting disclosures
+                    have not yet been added
+                    to this report.
+                  </p>
+
+                  <p className="complete-report-notes-empty-followup">
+                    Complete the Notes and
+                    Disclosures workspace
+                    before final printing.
+                  </p>
+                </section>
+              )}
+            </div>
+
+            <footer className="complete-report-statement-footer">
+              <span>
+                These notes form an integral
+                part of the financial
+                statements.
+              </span>
+
+              <span>
+                Financial Statement Studio
+              </span>
+            </footer>
+          </article>
         </section>
       ) : null}
     </main>
