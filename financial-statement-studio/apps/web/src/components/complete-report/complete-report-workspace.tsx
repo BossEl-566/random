@@ -3,8 +3,14 @@
 import Link from "next/link";
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
+import { StatementSection } from "@/components/financial-statements/statement-section";
+import {
+  formatStatementMoney,
+  toNumber,
+} from "@/components/financial-statements/statement-utils";
 
 import {
   getCompany,
@@ -12,6 +18,10 @@ import {
 import {
   getFinancialReport,
 } from "@/lib/financial-reports-api";
+import {
+  getProfitOrLossStatement,
+  getStatementOfFinancialPosition,
+} from "@/lib/financial-statements-api";
 
 import type {
   Company,
@@ -20,6 +30,12 @@ import type {
 import type {
   FinancialReport,
 } from "@/types/financial-report";
+
+import type {
+  FinancialStatementSection,
+  ProfitOrLossStatement,
+  StatementOfFinancialPosition,
+} from "@/types/financial-statement";
 
 type CompleteReportWorkspaceProps = {
   reportId: string;
@@ -120,6 +136,22 @@ export function CompleteReportWorkspace({
       null,
     );
 
+    const [
+    profitOrLoss,
+    setProfitOrLoss,
+  ] =
+    useState<ProfitOrLossStatement | null>(
+      null,
+    );
+
+      const [
+    financialPosition,
+    setFinancialPosition,
+  ] =
+    useState<StatementOfFinancialPosition | null>(
+      null,
+    );
+
   const [
     resourceState,
     setResourceState,
@@ -150,21 +182,38 @@ export function CompleteReportWorkspace({
         async (
           reportResponse,
         ) => {
-          const companyResponse =
-            await getCompany(
+                    const [
+            companyResponse,
+            profitOrLossResponse,
+            financialPositionResponse,
+          ] = await Promise.all([
+            getCompany(
               reportResponse.company_id,
-            );
+            ),
+
+            getProfitOrLossStatement(
+              reportId,
+            ),
+
+            getStatementOfFinancialPosition(
+              reportId,
+            ),
+          ]);
 
           return {
             reportResponse,
             companyResponse,
+            profitOrLossResponse,
+            financialPositionResponse,
           };
         },
       )
       .then(
-        ({
+                     ({
           reportResponse,
           companyResponse,
+          profitOrLossResponse,
+          financialPositionResponse,
         }) => {
           if (cancelled) {
             return;
@@ -176,6 +225,12 @@ export function CompleteReportWorkspace({
 
           setCompany(
             companyResponse,
+          );
+         setProfitOrLoss(
+            profitOrLossResponse,
+          );
+          setFinancialPosition(
+            financialPositionResponse,
           );
 
           setResourceState(
@@ -222,6 +277,52 @@ export function CompleteReportWorkspace({
         currentVersion + 1,
     );
   }
+    const profitOrLossSectionMap =
+    useMemo(() => {
+      return new Map<
+        string,
+        FinancialStatementSection
+      >(
+        profitOrLoss?.sections.map(
+          (section) => [
+            section.key,
+            section,
+          ],
+        ) ?? [],
+      );
+    }, [profitOrLoss]);
+
+  const directCostSections = [
+    profitOrLossSectionMap.get(
+      "cost_of_sales",
+    ),
+    profitOrLossSectionMap.get(
+      "direct_service_costs",
+    ),
+    profitOrLossSectionMap.get(
+      "manufacturing_costs",
+    ),
+  ].filter(
+    (
+      section,
+    ): section is FinancialStatementSection =>
+      section !== undefined,
+  );
+
+    const financialPositionSectionMap =
+    useMemo(() => {
+      return new Map<
+        string,
+        FinancialStatementSection
+      >(
+        financialPosition?.sections.map(
+          (section) => [
+            section.key,
+            section,
+          ],
+        ) ?? [],
+      );
+    }, [financialPosition]);
 
   const isFinal =
     report
@@ -766,6 +867,548 @@ export function CompleteReportWorkspace({
               </div>
             </div>
           </article>
+                    {/* STATEMENT OF PROFIT OR LOSS */}
+          {profitOrLoss ? (
+            <article className="complete-report-sheet complete-report-statement-sheet">
+              <header className="complete-report-section-header complete-report-statement-header">
+                <span>
+                  Section 04
+                </span>
+
+                <h1>
+                  Statement of Profit or Loss
+                </h1>
+
+                <p>
+                  For the period{" "}
+                  {formatDate(
+                    profitOrLoss.period_start,
+                  )}
+                  {" to "}
+                  {formatDate(
+                    profitOrLoss.period_end,
+                  )}
+                </p>
+              </header>
+
+              <div className="complete-report-statement-meta">
+                <div>
+                  <span>
+                    Company
+                  </span>
+
+                  <strong>
+                    {company.name}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {
+                      profitOrLoss.currency
+                    }
+                  </strong>
+                </div>
+              </div>
+
+              <div className="financial-statement-document__body complete-report-statement-body">
+                {profitOrLossSectionMap.get(
+                  "revenue",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    section={
+                      profitOrLossSectionMap.get(
+                        "revenue",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                {directCostSections.map(
+                  (section) => (
+                    <StatementSection
+                      currency={
+                        profitOrLoss.currency
+                      }
+                      hideWhenEmpty
+                      section={
+                        section
+                      }
+                      key={
+                        section.key
+                      }
+                    />
+                  ),
+                )}
+
+                <div className="financial-statement-subtotal financial-statement-subtotal--major">
+                  <strong>
+                    Gross Profit
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {
+                        profitOrLoss.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      profitOrLoss
+                        .gross_profit,
+                    )}
+                  </strong>
+                </div>
+
+                {profitOrLossSectionMap.get(
+                  "other_income",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      profitOrLossSectionMap.get(
+                        "other_income",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                {profitOrLossSectionMap.get(
+                  "administrative_expenses",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      profitOrLossSectionMap.get(
+                        "administrative_expenses",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                {profitOrLossSectionMap.get(
+                  "selling_distribution_expenses",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      profitOrLossSectionMap.get(
+                        "selling_distribution_expenses",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div className="financial-statement-subtotal">
+                  <strong>
+                    Operating Profit
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {
+                        profitOrLoss.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      profitOrLoss
+                        .operating_profit,
+                    )}
+                  </strong>
+                </div>
+
+                {profitOrLossSectionMap.get(
+                  "finance_costs",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      profitOrLossSectionMap.get(
+                        "finance_costs",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div className="financial-statement-subtotal">
+                  <strong>
+                    Profit Before Tax
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {
+                        profitOrLoss.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      profitOrLoss
+                        .profit_before_tax,
+                    )}
+                  </strong>
+                </div>
+
+                {profitOrLossSectionMap.get(
+                  "taxation",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      profitOrLoss.currency
+                    }
+                    hideWhenEmpty
+                    section={
+                      profitOrLossSectionMap.get(
+                        "taxation",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div
+                  className={
+                    toNumber(
+                      profitOrLoss
+                        .profit_after_tax,
+                    ) >= 0
+                      ? "financial-statement-final-total financial-statement-final-total--positive"
+                      : "financial-statement-final-total financial-statement-final-total--negative"
+                  }
+                >
+                  <div>
+                    <span>
+                      Result for the period
+                    </span>
+
+                    <strong>
+                      {toNumber(
+                        profitOrLoss
+                          .profit_after_tax,
+                      ) >= 0
+                        ? "Profit After Tax"
+                        : "Loss After Tax"}
+                    </strong>
+                  </div>
+
+                  <strong>
+                    <span>
+                      {
+                        profitOrLoss.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      profitOrLoss
+                        .profit_after_tax,
+                    )}
+                  </strong>
+                </div>
+              </div>
+
+              <footer className="complete-report-statement-footer">
+                <span>
+                  Prepared from posted,
+                  non-voided journal entries.
+                </span>
+
+                <span>
+                  Financial Statement Studio
+                </span>
+              </footer>
+            </article>
+          ) : null}
+                    {/* STATEMENT OF FINANCIAL POSITION */}
+          {financialPosition ? (
+            <article className="complete-report-sheet complete-report-statement-sheet">
+              <header className="complete-report-section-header complete-report-statement-header">
+                <span>
+                  Section 05
+                </span>
+
+                <h1>
+                  Statement of Financial Position
+                </h1>
+
+                <p>
+                  As at{" "}
+                  {formatDate(
+                    financialPosition.as_of,
+                  )}
+                </p>
+              </header>
+
+              <div className="complete-report-statement-meta">
+                <div>
+                  <span>
+                    Company
+                  </span>
+
+                  <strong>
+                    {company.name}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>
+                    Currency
+                  </span>
+
+                  <strong>
+                    {
+                      financialPosition.currency
+                    }
+                  </strong>
+                </div>
+              </div>
+
+              <div className="financial-statement-document__body complete-report-statement-body">
+                <div className="financial-position-column-heading">
+                  <span>
+                    Assets
+                  </span>
+                </div>
+
+                {financialPositionSectionMap.get(
+                  "non_current_assets",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      financialPosition.currency
+                    }
+                    section={
+                      financialPositionSectionMap.get(
+                        "non_current_assets",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                {financialPositionSectionMap.get(
+                  "current_assets",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      financialPosition.currency
+                    }
+                    section={
+                      financialPositionSectionMap.get(
+                        "current_assets",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div className="financial-statement-final-total">
+                  <div>
+                    <span>
+                      Assets
+                    </span>
+
+                    <strong>
+                      Total Assets
+                    </strong>
+                  </div>
+
+                  <strong>
+                    <span>
+                      {
+                        financialPosition.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      financialPosition
+                        .total_assets,
+                    )}
+                  </strong>
+                </div>
+
+                <div className="financial-position-column-heading">
+                  <span>
+                    Equity and Liabilities
+                  </span>
+                </div>
+
+                {financialPositionSectionMap.get(
+                  "equity",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      financialPosition.currency
+                    }
+                    section={
+                      financialPositionSectionMap.get(
+                        "equity",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div className="financial-statement-subtotal">
+                  <strong>
+                    Total Equity
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {
+                        financialPosition.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      financialPosition
+                        .total_equity,
+                    )}
+                  </strong>
+                </div>
+
+                {financialPositionSectionMap.get(
+                  "non_current_liabilities",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      financialPosition.currency
+                    }
+                    section={
+                      financialPositionSectionMap.get(
+                        "non_current_liabilities",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                {financialPositionSectionMap.get(
+                  "current_liabilities",
+                ) ? (
+                  <StatementSection
+                    currency={
+                      financialPosition.currency
+                    }
+                    section={
+                      financialPositionSectionMap.get(
+                        "current_liabilities",
+                      )!
+                    }
+                  />
+                ) : null}
+
+                <div className="financial-statement-subtotal">
+                  <strong>
+                    Total Liabilities
+                  </strong>
+
+                  <strong>
+                    <span>
+                      {
+                        financialPosition.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      financialPosition
+                        .total_liabilities,
+                    )}
+                  </strong>
+                </div>
+
+                <div className="financial-statement-final-total">
+                  <div>
+                    <span>
+                      Equity and liabilities
+                    </span>
+
+                    <strong>
+                      Total Equity and Liabilities
+                    </strong>
+                  </div>
+
+                  <strong>
+                    <span>
+                      {
+                        financialPosition.currency
+                      }
+                    </span>
+
+                    {formatStatementMoney(
+                      financialPosition
+                        .total_liabilities_and_equity,
+                    )}
+                  </strong>
+                </div>
+
+                <section
+                  className={
+                    financialPosition.is_balanced
+                      ? "financial-position-validation financial-position-validation--balanced"
+                      : "financial-position-validation financial-position-validation--error"
+                  }
+                >
+                  <div>
+                    <span>
+                      Accounting equation
+                    </span>
+
+                    <strong>
+                      {financialPosition.is_balanced
+                        ? "Assets equal equity and liabilities"
+                        : "Statement is out of balance"}
+                    </strong>
+
+                    <p>
+                      Difference:{" "}
+                      {
+                        financialPosition.currency
+                      }
+                      {" "}
+                      {formatStatementMoney(
+                        financialPosition
+                          .accounting_equation_difference,
+                      )}
+                    </p>
+                  </div>
+
+                  <span>
+                    {financialPosition.is_balanced
+                      ? "Balanced"
+                      : "Review required"}
+                  </span>
+                </section>
+              </div>
+
+              <footer className="complete-report-statement-footer">
+                <span>
+                  Current-year profit is
+                  included automatically
+                  within equity.
+                </span>
+
+                <span>
+                  Financial Statement Studio
+                </span>
+              </footer>
+            </article>
+          ) : null}
         </section>
       ) : null}
     </main>

@@ -7673,3 +7673,84 @@ button:disabled {
     min-height: 255mm;
   }
 }
+/* =========================================================
+   Complete Report — Financial Statements
+   ========================================================= */
+
+.complete-report-statement-header {
+  margin-bottom: 24px;
+}
+
+.complete-report-statement-header p {
+  margin: 10px 0 0;
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.complete-report-statement-meta {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    140px;
+  gap: 20px;
+  margin-bottom: 30px;
+  padding: 14px 16px;
+  border: 1px solid #e4e7ec;
+  background: #f8fafc;
+}
+
+.complete-report-statement-meta > div {
+  display: grid;
+  gap: 4px;
+}
+
+.complete-report-statement-meta span {
+  color: #667085;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.complete-report-statement-meta strong {
+  color: #101828;
+  font-size: 0.78rem;
+}
+
+.complete-report-statement-body {
+  padding: 0;
+}
+
+.complete-report-statement-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 34px;
+  padding-top: 14px;
+  border-top: 1px solid #e4e7ec;
+  color: #667085;
+  font-size: 0.65rem;
+}
+
+@media print {
+  .complete-report-statement-meta {
+    margin-bottom: 18px;
+    padding: 8px 10px;
+  }
+
+  .complete-report-statement-footer {
+    margin-top: 20px;
+  }
+
+  .complete-report-statement-sheet
+    .statement-section {
+    break-inside: avoid;
+  }
+
+  .complete-report-statement-sheet
+    .financial-statement-subtotal,
+  .complete-report-statement-sheet
+    .financial-statement-final-total {
+    break-inside: avoid;
+  }
+}
