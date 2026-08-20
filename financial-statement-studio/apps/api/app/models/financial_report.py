@@ -174,6 +174,23 @@ class FinancialReport(
         nullable=True,
     )
 
+    accountant_firm_name: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    accountant_professional_designation: Mapped[
+        str | None
+    ] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    accountant_firm_address: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     finalised_by: Mapped[str | None] = mapped_column(
         String(180),
         nullable=True,

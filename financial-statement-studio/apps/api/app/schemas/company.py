@@ -37,6 +37,8 @@ OPTIONAL_TEXT_FIELDS = (
     "registration_number",
     "tin",
     "ghana_card_number",
+    "principal_name",
+    "principal_title",
     "address",
     "telephone",
     "logo_path",
@@ -107,6 +109,16 @@ class CompanyBase(BaseModel):
     ghana_card_number: str | None = Field(
         default=None,
         max_length=100,
+    )
+
+    principal_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    principal_title: str | None = Field(
+        default=None,
+        max_length=120,
     )
 
     address: str | None = Field(
@@ -198,6 +210,16 @@ class CompanyUpdate(BaseModel):
     ghana_card_number: str | None = Field(
         default=None,
         max_length=100,
+    )
+
+    principal_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    principal_title: str | None = Field(
+        default=None,
+        max_length=120,
     )
 
     address: str | None = Field(

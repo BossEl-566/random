@@ -313,6 +313,18 @@ class FinancialReportService:
             "accountant_report_text": (
                 payload.accountant_report_text
             ),
+            "accountant_name": (
+                payload.accountant_name
+            ),
+            "accountant_firm_name": (
+                payload.accountant_firm_name
+            ),
+            "accountant_professional_designation": (
+                payload.accountant_professional_designation
+            ),
+            "accountant_firm_address": (
+                payload.accountant_firm_address
+            ),
         }
 
         try:
@@ -513,6 +525,40 @@ class FinancialReportService:
         ):
             values["accountant_report_text"] = (
                 payload.accountant_report_text
+            )
+
+        if (
+            "accountant_name"
+            in supplied_fields
+        ):
+            values["accountant_name"] = (
+                payload.accountant_name
+            )
+
+        if (
+            "accountant_firm_name"
+            in supplied_fields
+        ):
+            values["accountant_firm_name"] = (
+                payload.accountant_firm_name
+            )
+
+        if (
+            "accountant_professional_designation"
+            in supplied_fields
+        ):
+            values[
+                "accountant_professional_designation"
+            ] = (
+                payload.accountant_professional_designation
+            )
+
+        if (
+            "accountant_firm_address"
+            in supplied_fields
+        ):
+            values["accountant_firm_address"] = (
+                payload.accountant_firm_address
             )
 
         try:

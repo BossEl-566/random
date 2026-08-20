@@ -55,6 +55,16 @@ class Company(
         nullable=True,
     )
 
+    principal_name: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    principal_title: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+    )
+
     address: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

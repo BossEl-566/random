@@ -99,6 +99,26 @@ class FinancialReportCreate(BaseModel):
         max_length=20000,
     )
 
+    accountant_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_firm_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_professional_designation: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_firm_address: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
@@ -106,6 +126,10 @@ class FinancialReportCreate(BaseModel):
     @field_validator(
         "title",
         "accountant_report_text",
+        "accountant_name",
+        "accountant_firm_name",
+        "accountant_professional_designation",
+        "accountant_firm_address",
         mode="before",
     )
     @classmethod
@@ -168,6 +192,26 @@ class FinancialReportUpdate(BaseModel):
         max_length=20000,
     )
 
+    accountant_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_firm_name: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_professional_designation: str | None = Field(
+        default=None,
+        max_length=180,
+    )
+
+    accountant_firm_address: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
     model_config = ConfigDict(
         str_strip_whitespace=True,
     )
@@ -175,6 +219,10 @@ class FinancialReportUpdate(BaseModel):
     @field_validator(
         "title",
         "accountant_report_text",
+        "accountant_name",
+        "accountant_firm_name",
+        "accountant_professional_designation",
+        "accountant_firm_address",
         mode="before",
     )
     @classmethod
@@ -219,6 +267,10 @@ class FinancialReportResponse(BaseModel):
     accountant_report_text: str | None
 
     accountant_name: str | None
+    accountant_firm_name: str | None
+    accountant_professional_designation: str | None
+    accountant_firm_address: str | None
+
     finalised_by: str | None
     finalised_at: datetime | None
 
