@@ -1,0 +1,1898 @@
+===== COMPANY MODEL =====
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import Boolean, String, Text, true
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.database import Base
+from app.models.mixins import PrimaryKeyMixin, TimestampMixin
+
+
+if TYPE_CHECKING:
+    from app.models.financial_report import FinancialReport
+    from app.models.journal_entry import JournalEntry
+    from app.models.ledger_account import LedgerAccount
+    from app.models.tax_profile import TaxProfile
+
+
+class Company(
+    PrimaryKeyMixin,
+    TimestampMixin,
+    Base,
+):
+    """A business or organisation using the application."""
+
+    __tablename__ = "companies"
+
+    name: Mapped[str] = mapped_column(
+        String(180),
+        nullable=False,
+        index=True,
+    )
+
+    business_type: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        default="other",
+        server_default="other",
+        index=True,
+    )
+
+    registration_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    tin: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
+
+    ghana_card_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    address: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    telephone: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    email: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    default_currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="GHS",
+        server_default="GHS",
+    )
+
+    reporting_basis: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default="accrual",
+        server_default="accrual",
+    )
+
+    logo_path: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+        index=True,
+    )
+
+    financial_reports: Mapped[list[FinancialReport]] = relationship(
+        "FinancialReport",
+        back_populates="company",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    journal_entries: Mapped[list[JournalEntry]] = relationship(
+    "JournalEntry",
+    back_populates="company",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+
+    ledger_accounts: Mapped[list[LedgerAccount]] = relationship(
+    "LedgerAccount",
+    back_populates="company",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+    tax_profiles: Mapped[list[TaxProfile]] = relationship(
+    "TaxProfile",
+    back_populates="company",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+)
+
+    def __repr__(self) -> str:
+        return (
+            f"Company(id={self.id!r}, "
+            f"name={self.name!r})"
+        )
+===== FINANCIAL REPORT MODEL =====
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
+
+from app.core.database import Base
+from app.models.mixins import (
+    PrimaryKeyMixin,
+    TimestampMixin,
+)
+
+
+if TYPE_CHECKING:
+    from app.models.company import Company
+    from app.models.financial_report_note import (
+        FinancialReportNote,
+    )
+    from app.models.financial_report_version import (
+        FinancialReportVersion,
+    )
+    from app.models.journal_entry import (
+        JournalEntry,
+    )
+    from app.models.tax_calculation import (
+    TaxCalculation,
+)
+
+
+class FinancialReport(
+    PrimaryKeyMixin,
+    TimestampMixin,
+    Base,
+):
+    """
+    A financial-statement document belonging to one company.
+
+    Each reporting period is stored independently so that reports
+    from different years and revisions do not overwrite one another.
+    """
+
+    __tablename__ = "financial_reports"
+
+    __table_args__ = (
+        CheckConstraint(
+            "period_end >= period_start",
+            name="period_dates",
+        ),
+        CheckConstraint(
+            "revision_number > 0",
+            name="revision_number_positive",
+        ),
+    )
+
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "companies.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    comparison_report_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "financial_reports.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    revision_series_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+
+    revision_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+        index=True,
+    )
+
+    supersedes_report_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+
+    revision_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        index=True,
+    )
+
+    report_type: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        default="annual_financial_statements",
+        server_default="annual_financial_statements",
+        index=True,
+    )
+
+    period_start: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+    )
+
+    period_end: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+    )
+
+    financial_year: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        index=True,
+    )
+
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default="GHS",
+        server_default="GHS",
+    )
+
+    business_template: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        default="other",
+        server_default="other",
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="draft",
+        server_default="draft",
+        index=True,
+    )
+
+    accountant_report_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    accountant_name: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    finalised_by: Mapped[str | None] = mapped_column(
+        String(180),
+        nullable=True,
+    )
+
+    finalised_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    company: Mapped[Company] = relationship(
+        "Company",
+        back_populates="financial_reports",
+    )
+
+    journal_entries: Mapped[
+        list[JournalEntry]
+    ] = relationship(
+        "JournalEntry",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    notes: Mapped[
+        list[FinancialReportNote]
+    ] = relationship(
+        "FinancialReportNote",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    versions: Mapped[
+        list[FinancialReportVersion]
+    ] = relationship(
+        "FinancialReportVersion",
+        back_populates="financial_report",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by=(
+            "FinancialReportVersion.revision_number"
+        ),
+    )
+
+    tax_calculations: Mapped[
+    list[TaxCalculation]
+] = relationship(
+    "TaxCalculation",
+    back_populates="financial_report",
+    cascade="all, delete-orphan",
+    passive_deletes=True,
+    order_by="TaxCalculation.calculation_date",
+)
+
+    comparison_report: Mapped[
+        FinancialReport | None
+    ] = relationship(
+        "FinancialReport",
+        remote_side="FinancialReport.id",
+        foreign_keys=[comparison_report_id],
+        back_populates="comparison_dependents",
+    )
+
+    comparison_dependents: Mapped[
+        list[FinancialReport]
+    ] = relationship(
+        "FinancialReport",
+        foreign_keys=[comparison_report_id],
+        back_populates="comparison_report",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"FinancialReport(id={self.id!r}, "
+            f"title={self.title!r}, "
+            f"revision={self.revision_number!r}, "
+            f"status={self.status!r})"
+        )
+===== COMPANY SCHEMAS =====
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+)
+
+
+
+class BusinessType(StrEnum):
+    """Supported default company templates."""
+
+    TRADING = "trading"
+    SERVICE = "service"
+    MANUFACTURING = "manufacturing"
+    RETAIL = "retail"
+    TRANSPORT_LOGISTICS = "transport_logistics"
+    CHURCH_NONPROFIT = "church_nonprofit"
+    SCHOOL = "school"
+    OTHER = "other"
+
+
+class ReportingBasis(StrEnum):
+    """Accounting basis used by the company."""
+
+    ACCRUAL = "accrual"
+    CASH = "cash"
+    MODIFIED_CASH = "modified_cash"
+
+
+OPTIONAL_TEXT_FIELDS = (
+    "registration_number",
+    "tin",
+    "ghana_card_number",
+    "address",
+    "telephone",
+    "logo_path",
+)
+
+
+def clean_required_name(value: str) -> str:
+    """
+    Remove unnecessary spaces while keeping the company name readable.
+    """
+
+    cleaned_value = " ".join(value.split())
+
+    if len(cleaned_value) < 2:
+        raise ValueError(
+            "Company name must contain at least two characters.",
+        )
+
+    return cleaned_value
+
+
+def clean_optional_text(value: Any) -> Any:
+    """
+    Convert empty optional text fields to None.
+
+    A blank value is different from a confirmed numeric zero, so blank
+    optional text values are stored as null.
+    """
+
+    if not isinstance(value, str):
+        return value
+
+    cleaned_value = value.strip()
+
+    if cleaned_value == "":
+        return None
+
+    return cleaned_value
+
+
+def clean_currency(value: str) -> str:
+    """Store three-letter currency codes in uppercase."""
+
+    return value.strip().upper()
+
+
+class CompanyBase(BaseModel):
+    """Fields shared by company creation and API responses."""
+
+    name: str = Field(
+        min_length=2,
+        max_length=180,
+        examples=["Zackai Logistics"],
+    )
+
+    business_type: BusinessType = BusinessType.OTHER
+
+    registration_number: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    tin: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    ghana_card_number: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    address: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    telephone: str | None = Field(
+        default=None,
+        max_length=50,
+    )
+
+    email: EmailStr | None = None
+
+    default_currency: str = Field(
+        default="GHS",
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Za-z]{3}$",
+    )
+
+    reporting_basis: ReportingBasis = ReportingBasis.ACCRUAL
+
+    logo_path: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        return clean_required_name(value)
+
+    @field_validator(
+        *OPTIONAL_TEXT_FIELDS,
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+    @field_validator("default_currency")
+    @classmethod
+    def validate_currency(
+        cls,
+        value: str,
+    ) -> str:
+        return clean_currency(value)
+
+
+class CompanyCreate(CompanyBase):
+    """Payload used when creating a company."""
+
+    pass
+
+
+class CompanyUpdate(BaseModel):
+    """
+    Payload used for partial company updates.
+
+    All fields are optional because PATCH changes only supplied fields.
+    """
+
+    name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=180,
+    )
+
+    business_type: BusinessType | None = None
+
+    registration_number: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    tin: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    ghana_card_number: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    address: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    telephone: str | None = Field(
+        default=None,
+        max_length=50,
+    )
+
+    email: EmailStr | None = None
+
+    default_currency: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Za-z]{3}$",
+    )
+
+    reporting_basis: ReportingBasis | None = None
+
+    logo_path: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return clean_required_name(value)
+
+    @field_validator(
+        *OPTIONAL_TEXT_FIELDS,
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+    @field_validator("default_currency")
+    @classmethod
+    def validate_currency(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return clean_currency(value)
+
+
+class CompanyResponse(CompanyBase):
+    """Company data returned by the API."""
+
+    id: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class CompanyListResponse(BaseModel):
+    """Paginated company-list response."""
+
+    items: list[CompanyResponse]
+    total: int
+    offset: int
+    limit: int
+===== FINANCIAL REPORT SCHEMAS =====
+from datetime import date, datetime
+from enum import StrEnum
+from typing import Any, Self
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+from app.schemas.company import BusinessType
+
+
+class ReportType(StrEnum):
+    """Types of financial documents supported by the workspace."""
+
+    ANNUAL_FINANCIAL_STATEMENTS = (
+        "annual_financial_statements"
+    )
+    MANAGEMENT_ACCOUNTS = "management_accounts"
+    TAX_COMPUTATION = "tax_computation"
+    CUSTOM_REPORT = "custom_report"
+
+
+class ReportStatus(StrEnum):
+    """Lifecycle status of a financial report."""
+
+    DRAFT = "draft"
+    INCOMPLETE = "incomplete"
+    READY_FOR_REVIEW = "ready_for_review"
+    FINALISED = "finalised"
+    PRINTED = "printed"
+    ARCHIVED = "archived"
+
+
+def clean_optional_text(
+    value: Any,
+) -> Any:
+    """Convert empty optional text values to None."""
+
+    if not isinstance(value, str):
+        return value
+
+    cleaned_value = value.strip()
+
+    return cleaned_value or None
+
+
+def clean_currency(
+    value: str | None,
+) -> str | None:
+    """Normalise three-letter currency codes."""
+
+    if value is None:
+        return None
+
+    return value.strip().upper()
+
+
+class FinancialReportCreate(BaseModel):
+    """Payload used when creating a financial report."""
+
+    company_id: str = Field(
+        min_length=36,
+        max_length=36,
+    )
+
+    title: str | None = Field(
+        default=None,
+        max_length=255,
+    )
+
+    report_type: ReportType = (
+        ReportType.ANNUAL_FINANCIAL_STATEMENTS
+    )
+
+    period_start: date
+    period_end: date
+
+    currency: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Za-z]{3}$",
+    )
+
+    business_template: BusinessType | None = None
+
+    comparison_report_id: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+    )
+
+    accountant_report_text: str | None = Field(
+        default=None,
+        max_length=20000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+    @field_validator(
+        "title",
+        "accountant_report_text",
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+    @field_validator("currency")
+    @classmethod
+    def validate_currency(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        return clean_currency(value)
+
+    @model_validator(mode="after")
+    def validate_reporting_period(
+        self,
+    ) -> Self:
+        if self.period_end < self.period_start:
+            raise ValueError(
+                "Reporting end date cannot be before the start date.",
+            )
+
+        return self
+
+
+class FinancialReportUpdate(BaseModel):
+    """Payload used to partially update a financial report."""
+
+    title: str | None = Field(
+        default=None,
+        max_length=255,
+    )
+
+    report_type: ReportType | None = None
+
+    period_start: date | None = None
+    period_end: date | None = None
+
+    currency: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=3,
+        pattern=r"^[A-Za-z]{3}$",
+    )
+
+    business_template: BusinessType | None = None
+
+    comparison_report_id: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+    )
+
+    accountant_report_text: str | None = Field(
+        default=None,
+        max_length=20000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+    @field_validator(
+        "title",
+        "accountant_report_text",
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+    @field_validator("currency")
+    @classmethod
+    def validate_currency(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        return clean_currency(value)
+
+
+class FinancialReportResponse(BaseModel):
+    """Financial report data returned by the API."""
+
+    id: str
+    company_id: str
+    comparison_report_id: str | None
+
+    revision_series_id: str | None
+    revision_number: int
+    supersedes_report_id: str | None
+    revision_reason: str | None
+
+    title: str
+    report_type: ReportType
+
+    period_start: date
+    period_end: date
+    financial_year: int
+
+    currency: str
+    business_template: BusinessType
+    status: ReportStatus
+
+    accountant_report_text: str | None
+
+    accountant_name: str | None
+    finalised_by: str | None
+    finalised_at: datetime | None
+
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class FinancialReportListResponse(BaseModel):
+    """Paginated financial-report list."""
+
+    items: list[FinancialReportResponse]
+    total: int
+    offset: int
+    limit: int
+===== COMPANY SERVICE =====
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.models.company import Company
+from app.repositories.company_repository import CompanyRepository
+from app.schemas.company import CompanyCreate, CompanyUpdate
+
+
+class CompanyServiceError(Exception):
+    """Base exception for company operations."""
+
+
+class CompanyNotFoundError(CompanyServiceError):
+    """Raised when a company cannot be found."""
+
+
+class EmptyCompanyUpdateError(CompanyServiceError):
+    """Raised when an update request contains no fields."""
+
+
+class CompanyPersistenceError(CompanyServiceError):
+    """Raised when a company database operation fails."""
+
+
+class CompanyService:
+    """Application logic for company management."""
+
+    def __init__(
+        self,
+        repository: CompanyRepository | None = None,
+    ) -> None:
+        self.repository = (
+            repository
+            or CompanyRepository()
+        )
+
+    def create_company(
+        self,
+        database_session: Session,
+        payload: CompanyCreate,
+    ) -> Company:
+        values = payload.model_dump(
+            mode="json",
+        )
+
+        try:
+            return self.repository.create(
+                database_session,
+                values,
+            )
+        except SQLAlchemyError as error:
+            raise CompanyPersistenceError(
+                "The company could not be saved.",
+            ) from error
+
+    def list_companies(
+        self,
+        database_session: Session,
+        *,
+        search: str | None,
+        include_inactive: bool,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[Company], int]:
+        normalized_search = (
+            search.strip()
+            if search and search.strip()
+            else None
+        )
+
+        try:
+            return self.repository.list(
+                database_session,
+                search=normalized_search,
+                include_inactive=include_inactive,
+                offset=offset,
+                limit=limit,
+            )
+        except SQLAlchemyError as error:
+            raise CompanyPersistenceError(
+                "Companies could not be retrieved.",
+            ) from error
+
+    def get_company(
+        self,
+        database_session: Session,
+        company_id: str,
+    ) -> Company:
+        try:
+            company = self.repository.get_by_id(
+                database_session,
+                company_id,
+            )
+        except SQLAlchemyError as error:
+            raise CompanyPersistenceError(
+                "The company could not be retrieved.",
+            ) from error
+
+        if company is None:
+            raise CompanyNotFoundError(
+                "The requested company was not found.",
+            )
+
+        return company
+
+    def update_company(
+        self,
+        database_session: Session,
+        company_id: str,
+        payload: CompanyUpdate,
+    ) -> Company:
+        company = self.get_company(
+            database_session,
+            company_id,
+        )
+
+        changes = payload.model_dump(
+            mode="json",
+            exclude_unset=True,
+        )
+
+        if not changes:
+            raise EmptyCompanyUpdateError(
+                "Provide at least one company field to update.",
+            )
+
+        try:
+            return self.repository.update(
+                database_session,
+                company,
+                changes,
+            )
+        except SQLAlchemyError as error:
+            raise CompanyPersistenceError(
+                "The company could not be updated.",
+            ) from error
+
+    def deactivate_company(
+        self,
+        database_session: Session,
+        company_id: str,
+    ) -> Company:
+        company = self.get_company(
+            database_session,
+            company_id,
+        )
+
+        if not company.is_active:
+            return company
+
+        try:
+            return self.repository.deactivate(
+                database_session,
+                company,
+            )
+        except SQLAlchemyError as error:
+            raise CompanyPersistenceError(
+                "The company could not be deactivated.",
+            ) from error
+===== FINANCIAL REPORT SERVICE =====
+from datetime import date
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.models.company import Company
+from app.models.financial_report import FinancialReport
+from app.repositories.financial_report_repository import (
+    FinancialReportRepository,
+)
+from app.schemas.company import BusinessType
+from app.schemas.financial_report import (
+    FinancialReportCreate,
+    FinancialReportUpdate,
+    ReportStatus,
+    ReportType,
+)
+
+LOCKED_REPORT_STATUSES = {
+    "finalised",
+    "printed",
+    "archived",
+}
+
+
+class FinancialReportServiceError(Exception):
+    """Base exception for financial-report operations."""
+
+
+class FinancialReportNotFoundError(
+    FinancialReportServiceError,
+):
+    """Raised when a financial report cannot be found."""
+
+
+class FinancialReportCompanyNotFoundError(
+    FinancialReportServiceError,
+):
+    """Raised when the selected company cannot be found."""
+
+
+class InactiveFinancialReportCompanyError(
+    FinancialReportServiceError,
+):
+    """Raised when a new report is created for an inactive company."""
+
+
+class InvalidFinancialReportPeriodError(
+    FinancialReportServiceError,
+):
+    """Raised when the reporting period is invalid."""
+
+
+class InvalidComparisonReportError(
+    FinancialReportServiceError,
+):
+    """Raised when a comparative report is invalid."""
+
+
+class EmptyFinancialReportUpdateError(
+    FinancialReportServiceError,
+):
+    """Raised when an update contains no supplied fields."""
+class LockedFinancialReportError(
+    FinancialReportServiceError,
+):
+    """Raised when locked report metadata is changed."""
+
+class FinancialReportPersistenceError(
+    FinancialReportServiceError,
+):
+    """Raised when a report database operation fails."""
+
+
+def format_report_date(
+    value: date,
+) -> str:
+    """Create a readable date for automatically generated titles."""
+
+    return (
+        f"{value.day} "
+        f"{value.strftime('%B %Y')}"
+    )
+
+
+def build_report_title(
+    report_type: ReportType,
+    period_end: date,
+) -> str:
+    """Generate a professional report title."""
+
+    formatted_date = format_report_date(
+        period_end,
+    )
+
+    titles = {
+        ReportType.ANNUAL_FINANCIAL_STATEMENTS: (
+            "Financial Statements for the Year "
+            f"Ended {formatted_date}"
+        ),
+        ReportType.MANAGEMENT_ACCOUNTS: (
+            "Management Accounts for the Period "
+            f"Ended {formatted_date}"
+        ),
+        ReportType.TAX_COMPUTATION: (
+            "Tax Computation for the Year "
+            f"Ended {formatted_date}"
+        ),
+        ReportType.CUSTOM_REPORT: (
+            "Financial Report for the Period "
+            f"Ended {formatted_date}"
+        ),
+    }
+
+    return titles[report_type]
+
+
+def get_default_business_template(
+    company: Company,
+) -> BusinessType:
+    """Use the company's business type as the report template."""
+
+    try:
+        return BusinessType(
+            company.business_type,
+        )
+    except ValueError:
+        return BusinessType.OTHER
+
+
+class FinancialReportService:
+    """Application rules for financial-report documents."""
+
+    def __init__(
+        self,
+        repository: FinancialReportRepository | None = None,
+    ) -> None:
+        self.repository = (
+            repository
+            or FinancialReportRepository()
+        )
+
+    def get_company(
+        self,
+        database_session: Session,
+        company_id: str,
+    ) -> Company:
+        try:
+            company = (
+                self.repository.get_company_by_id(
+                    database_session,
+                    company_id,
+                )
+            )
+        except SQLAlchemyError as error:
+            raise FinancialReportPersistenceError(
+                "The selected company could not be retrieved.",
+            ) from error
+
+        if company is None:
+            raise FinancialReportCompanyNotFoundError(
+                "The selected company was not found.",
+            )
+
+        return company
+
+    def get_report(
+        self,
+        database_session: Session,
+        report_id: str,
+    ) -> FinancialReport:
+        try:
+            financial_report = (
+                self.repository.get_by_id(
+                    database_session,
+                    report_id,
+                )
+            )
+        except SQLAlchemyError as error:
+            raise FinancialReportPersistenceError(
+                "The financial report could not be retrieved.",
+            ) from error
+
+        if financial_report is None:
+            raise FinancialReportNotFoundError(
+                "The requested financial report was not found.",
+            )
+
+        return financial_report
+
+    def validate_period(
+        self,
+        period_start: date,
+        period_end: date,
+    ) -> None:
+        if period_end < period_start:
+            raise InvalidFinancialReportPeriodError(
+                "Reporting end date cannot be before the start date.",
+            )
+
+    def validate_comparison_report(
+        self,
+        database_session: Session,
+        *,
+        company_id: str,
+        comparison_report_id: str | None,
+        current_period_end: date,
+        current_report_id: str | None = None,
+    ) -> FinancialReport | None:
+        if comparison_report_id is None:
+            return None
+
+        if (
+            current_report_id
+            and comparison_report_id
+            == current_report_id
+        ):
+            raise InvalidComparisonReportError(
+                "A financial report cannot compare against itself.",
+            )
+
+        comparison_report = self.get_report(
+            database_session,
+            comparison_report_id,
+        )
+
+        if (
+            comparison_report.company_id
+            != company_id
+        ):
+            raise InvalidComparisonReportError(
+                "The comparative report must belong to the same company.",
+            )
+
+        if (
+            comparison_report.period_end
+            >= current_period_end
+        ):
+            raise InvalidComparisonReportError(
+                "The comparative report must be from an earlier reporting period.",
+            )
+
+        return comparison_report
+
+    def create_report(
+        self,
+        database_session: Session,
+        payload: FinancialReportCreate,
+    ) -> FinancialReport:
+        company = self.get_company(
+            database_session,
+            payload.company_id,
+        )
+
+        if not company.is_active:
+            raise InactiveFinancialReportCompanyError(
+                "A new report cannot be created for an inactive company.",
+            )
+
+        self.validate_period(
+            payload.period_start,
+            payload.period_end,
+        )
+
+        self.validate_comparison_report(
+            database_session,
+            company_id=company.id,
+            comparison_report_id=(
+                payload.comparison_report_id
+            ),
+            current_period_end=payload.period_end,
+        )
+
+        report_type = payload.report_type
+
+        title = (
+            payload.title
+            or build_report_title(
+                report_type,
+                payload.period_end,
+            )
+        )
+
+        business_template = (
+            payload.business_template
+            or get_default_business_template(
+                company,
+            )
+        )
+
+        currency = (
+            payload.currency
+            or company.default_currency
+        )
+
+        values: dict[str, object] = {
+            "company_id": company.id,
+            "comparison_report_id": (
+                payload.comparison_report_id
+            ),
+            "title": title,
+            "report_type": report_type.value,
+            "period_start": payload.period_start,
+            "period_end": payload.period_end,
+            "financial_year": (
+                payload.period_end.year
+            ),
+            "currency": currency,
+            "business_template": (
+                business_template.value
+            ),
+            "status": ReportStatus.DRAFT.value,
+            "accountant_report_text": (
+                payload.accountant_report_text
+            ),
+        }
+
+        try:
+            return self.repository.create(
+                database_session,
+                values,
+            )
+        except SQLAlchemyError as error:
+            raise FinancialReportPersistenceError(
+                "The financial report could not be saved.",
+            ) from error
+
+    def list_reports(
+        self,
+        database_session: Session,
+        *,
+        company_id: str | None,
+        search: str | None,
+        report_status: ReportStatus | None,
+        include_archived: bool,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[FinancialReport], int]:
+        if company_id:
+            self.get_company(
+                database_session,
+                company_id,
+            )
+
+        normalized_search = (
+            search.strip()
+            if search and search.strip()
+            else None
+        )
+
+        try:
+            return self.repository.list(
+                database_session,
+                company_id=company_id,
+                search=normalized_search,
+                report_status=(
+                    report_status.value
+                    if report_status
+                    else None
+                ),
+                include_archived=include_archived,
+                offset=offset,
+                limit=limit,
+            )
+        except SQLAlchemyError as error:
+            raise FinancialReportPersistenceError(
+                "Financial reports could not be retrieved.",
+            ) from error
+
+    def update_report(
+        self,
+        database_session: Session,
+        report_id: str,
+        payload: FinancialReportUpdate,
+    ) -> FinancialReport:
+        financial_report = self.get_report(
+            database_session,
+            report_id,
+        )
+
+        if (
+            financial_report.status
+            in LOCKED_REPORT_STATUSES
+        ):
+            raise LockedFinancialReportError(
+                (
+                    "The financial report cannot be edited "
+                    f"because its status is "
+                    f"'{financial_report.status}'. "
+                    "Create a new revision instead."
+                ),
+            )
+
+        supplied_fields = payload.model_fields_set
+
+        if not supplied_fields:
+            raise EmptyFinancialReportUpdateError(
+                "Provide at least one report field to update.",
+            )
+
+        company = self.get_company(
+            database_session,
+            financial_report.company_id,
+        )
+
+        period_start = (
+            payload.period_start
+            if "period_start" in supplied_fields
+            else financial_report.period_start
+        )
+
+        period_end = (
+            payload.period_end
+            if "period_end" in supplied_fields
+            else financial_report.period_end
+        )
+
+        if period_start is None or period_end is None:
+            raise InvalidFinancialReportPeriodError(
+                "Both reporting start and end dates are required.",
+            )
+
+        self.validate_period(
+            period_start,
+            period_end,
+        )
+
+        comparison_report_id = (
+            payload.comparison_report_id
+            if "comparison_report_id"
+            in supplied_fields
+            else financial_report.comparison_report_id
+        )
+
+        self.validate_comparison_report(
+            database_session,
+            company_id=financial_report.company_id,
+            comparison_report_id=(
+                comparison_report_id
+            ),
+            current_period_end=period_end,
+            current_report_id=financial_report.id,
+        )
+
+        report_type = (
+            payload.report_type
+            if "report_type" in supplied_fields
+            and payload.report_type is not None
+            else ReportType(
+                financial_report.report_type,
+            )
+        )
+
+        values: dict[str, object] = {}
+
+        if "title" in supplied_fields:
+            values["title"] = (
+                payload.title
+                or build_report_title(
+                    report_type,
+                    period_end,
+                )
+            )
+
+        if "report_type" in supplied_fields:
+            values["report_type"] = (
+                report_type.value
+            )
+
+        if "period_start" in supplied_fields:
+            values["period_start"] = (
+                period_start
+            )
+
+        if "period_end" in supplied_fields:
+            values["period_end"] = period_end
+            values["financial_year"] = (
+                period_end.year
+            )
+
+        if "currency" in supplied_fields:
+            values["currency"] = (
+                payload.currency
+                or company.default_currency
+            )
+
+        if (
+            "business_template"
+            in supplied_fields
+        ):
+            template = (
+                payload.business_template
+                or get_default_business_template(
+                    company,
+                )
+            )
+
+            values["business_template"] = (
+                template.value
+            )
+
+        if (
+            "comparison_report_id"
+            in supplied_fields
+        ):
+            values["comparison_report_id"] = (
+                payload.comparison_report_id
+            )
+
+        if (
+            "accountant_report_text"
+            in supplied_fields
+        ):
+            values["accountant_report_text"] = (
+                payload.accountant_report_text
+            )
+
+        try:
+            return self.repository.update(
+                database_session,
+                financial_report,
+                values,
+            )
+        except SQLAlchemyError as error:
+            raise FinancialReportPersistenceError(
+                "The financial report could not be updated.",
+            ) from error
+===== COMPANY REPOSITORY =====
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.models.company import Company
+
+
+class CompanyRepository:
+    """Database operations for company records."""
+
+    def create(
+        self,
+        database_session: Session,
+        values: dict[str, object],
+    ) -> Company:
+        company = Company(**values)
+
+        try:
+            database_session.add(company)
+            database_session.commit()
+            database_session.refresh(company)
+        except SQLAlchemyError:
+            database_session.rollback()
+            raise
+
+        return company
+
+    def get_by_id(
+        self,
+        database_session: Session,
+        company_id: str,
+    ) -> Company | None:
+        return database_session.get(
+            Company,
+            company_id,
+        )
+
+    def list(
+        self,
+        database_session: Session,
+        *,
+        search: str | None,
+        include_inactive: bool,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[Company], int]:
+        filters = []
+
+        if not include_inactive:
+            filters.append(
+                Company.is_active.is_(True),
+            )
+
+        if search:
+            normalized_search = search.strip().lower()
+
+            filters.append(
+                func.lower(Company.name).contains(
+                    normalized_search,
+                ),
+            )
+
+        list_statement = (
+            select(Company)
+            .where(*filters)
+            .order_by(
+                Company.name.asc(),
+                Company.created_at.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+
+        count_statement = (
+            select(func.count())
+            .select_from(Company)
+            .where(*filters)
+        )
+
+        companies = list(
+            database_session.scalars(
+                list_statement,
+            ).all(),
+        )
+
+        total = (
+            database_session.scalar(
+                count_statement,
+            )
+            or 0
+        )
+
+        return companies, total
+
+    def update(
+        self,
+        database_session: Session,
+        company: Company,
+        values: dict[str, object],
+    ) -> Company:
+        for field_name, value in values.items():
+            setattr(
+                company,
+                field_name,
+                value,
+            )
+
+        try:
+            database_session.add(company)
+            database_session.commit()
+            database_session.refresh(company)
+        except SQLAlchemyError:
+            database_session.rollback()
+            raise
+
+        return company
+
+    def deactivate(
+        self,
+        database_session: Session,
+        company: Company,
+    ) -> Company:
+        company.is_active = False
+
+        try:
+            database_session.add(company)
+            database_session.commit()
+            database_session.refresh(company)
+        except SQLAlchemyError:
+            database_session.rollback()
+            raise
+
+        return company
+===== FINANCIAL REPORT REPOSITORY =====
+from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from app.models.company import Company
+from app.models.financial_report import FinancialReport
+
+
+class FinancialReportRepository:
+    """Database operations for financial reports."""
+
+    def create(
+        self,
+        database_session: Session,
+        values: dict[str, object],
+    ) -> FinancialReport:
+        financial_report = FinancialReport(
+            **values,
+        )
+
+        try:
+            database_session.add(
+                financial_report,
+            )
+            database_session.commit()
+            database_session.refresh(
+                financial_report,
+            )
+        except SQLAlchemyError:
+            database_session.rollback()
+            raise
+
+        return financial_report
+
+    def get_by_id(
+        self,
+        database_session: Session,
+        report_id: str,
+    ) -> FinancialReport | None:
+        return database_session.get(
+            FinancialReport,
+            report_id,
+        )
+
+    def get_company_by_id(
+        self,
+        database_session: Session,
+        company_id: str,
+    ) -> Company | None:
+        return database_session.get(
+            Company,
+            company_id,
+        )
+
+    def list(
+        self,
+        database_session: Session,
+        *,
+        company_id: str | None,
+        search: str | None,
+        report_status: str | None,
+        include_archived: bool,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[FinancialReport], int]:
+        filters = []
+
+        if company_id:
+            filters.append(
+                FinancialReport.company_id
+                == company_id,
+            )
+
+        if search:
+            normalized_search = (
+                search.strip().lower()
+            )
+
+            filters.append(
+                func.lower(
+                    FinancialReport.title,
+                ).contains(
+                    normalized_search,
+                ),
+            )
+
+        if report_status:
+            filters.append(
+                FinancialReport.status
+                == report_status,
+            )
+        elif not include_archived:
+            filters.append(
+                FinancialReport.status
+                != "archived",
+            )
+
+        list_statement = (
+            select(FinancialReport)
+            .where(*filters)
+            .order_by(
+                FinancialReport.period_end.desc(),
+                FinancialReport.created_at.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+
+        count_statement = (
+            select(func.count())
+            .select_from(FinancialReport)
+            .where(*filters)
+        )
+
+        reports = list(
+            database_session.scalars(
+                list_statement,
+            ).all(),
+        )
+
+        total = (
+            database_session.scalar(
+                count_statement,
+            )
+            or 0
+        )
+
+        return reports, total
+
+    def update(
+        self,
+        database_session: Session,
+        financial_report: FinancialReport,
+        values: dict[str, object],
+    ) -> FinancialReport:
+        for field_name, value in values.items():
+            setattr(
+                financial_report,
+                field_name,
+                value,
+            )
+
+        try:
+            database_session.add(
+                financial_report,
+            )
+            database_session.commit()
+            database_session.refresh(
+                financial_report,
+            )
+        except SQLAlchemyError:
+            database_session.rollback()
+            raise
+
+        return financial_report
+===== CURRENT ALEMBIC HEAD =====
+abbf66f9e8dd (head)
+
+===== ALEMBIC HISTORY =====
+FAILED: Can't locate revision identified by 'head'
