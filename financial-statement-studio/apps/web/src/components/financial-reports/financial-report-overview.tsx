@@ -541,12 +541,33 @@ export function FinancialReportOverview({
     View tax report →
   </strong>
 </Link>
+<Link
+  className="report-launch-card report-launch-card--statement"
+  href={`/reports/${report.id}/complete-report`}
+>
+  <span>11</span>
+
+  <h3>
+    Complete Financial Statements
+  </h3>
+
+  <p>
+    Preview the full financial statement
+    package from the cover page through
+    the statements, notes and taxation
+    sections.
+  </p>
+
+  <strong>
+    Open complete report →
+  </strong>
+</Link>
 
     <Link
   className="report-launch-card report-launch-card--statement report-launch-card--finalisation"
   href={`/reports/${report.id}/finalisation`}
 >
-  <span>11</span>
+  <span>12</span>
 
   <h3>
     Finalisation and Versions

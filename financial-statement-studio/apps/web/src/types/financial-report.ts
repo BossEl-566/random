@@ -71,6 +71,13 @@ export type FinancialReport = {
   status: ReportStatus;
 
   accountant_report_text: string | null;
+
+  accountant_name: string | null;
+  accountant_firm_name: string | null;
+  accountant_professional_designation:
+    string | null;
+  accountant_firm_address: string | null;
+
   finalised_at: string | null;
 
   created_at: string;
@@ -94,6 +101,12 @@ export type FinancialReportCreatePayload = {
   business_template?: BusinessType | null;
   comparison_report_id?: string | null;
   accountant_report_text?: string | null;
+
+  accountant_name?: string | null;
+  accountant_firm_name?: string | null;
+  accountant_professional_designation?:
+    string | null;
+  accountant_firm_address?: string | null;
 };
 
 export type FinancialReportUpdatePayload = {
@@ -105,6 +118,12 @@ export type FinancialReportUpdatePayload = {
   business_template?: BusinessType | null;
   comparison_report_id?: string | null;
   accountant_report_text?: string | null;
+
+  accountant_name?: string | null;
+  accountant_firm_name?: string | null;
+  accountant_professional_designation?:
+    string | null;
+  accountant_firm_address?: string | null;
 };
 
 export type FinancialReportListQuery = {

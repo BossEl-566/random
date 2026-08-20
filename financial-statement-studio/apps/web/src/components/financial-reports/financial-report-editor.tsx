@@ -43,6 +43,12 @@ type ReportFormValues = {
   currency: string;
   businessTemplate: BusinessType;
   comparisonReportId: string;
+
+  accountantName: string;
+  accountantFirmName: string;
+  accountantProfessionalDesignation: string;
+  accountantFirmAddress: string;
+
   accountantReportText: string;
 };
 
@@ -91,9 +97,23 @@ function getInitialValues(
         report.business_template,
       comparisonReportId:
         report.comparison_report_id ?? "",
-      accountantReportText:
-        report.accountant_report_text ??
+
+      accountantName:
+        report.accountant_name ?? "",
+
+      accountantFirmName:
+        report.accountant_firm_name ?? "",
+
+      accountantProfessionalDesignation:
+        report
+          .accountant_professional_designation ??
         "",
+
+      accountantFirmAddress:
+        report.accountant_firm_address ?? "",
+
+      accountantReportText:
+        report.accountant_report_text ?? "",
     };
   }
 
@@ -120,6 +140,12 @@ function getInitialValues(
       preferredCompany
         ?.business_type ?? "other",
     comparisonReportId: "",
+
+    accountantName: "",
+    accountantFirmName: "",
+    accountantProfessionalDesignation: "",
+    accountantFirmAddress: "",
+
     accountantReportText: "",
   };
 }
@@ -353,6 +379,27 @@ export function FinancialReportEditor({
           nullableText(
             values.comparisonReportId,
           ),
+         accountant_name:
+          nullableText(
+            values.accountantName,
+          ),
+
+        accountant_firm_name:
+          nullableText(
+            values.accountantFirmName,
+          ),
+
+        accountant_professional_designation:
+          nullableText(
+            values
+              .accountantProfessionalDesignation,
+          ),
+
+        accountant_firm_address:
+          nullableText(
+            values.accountantFirmAddress,
+          ),
+
         accountant_report_text:
           nullableText(
             values.accountantReportText,
@@ -723,36 +770,150 @@ export function FinancialReportEditor({
             </div>
           </section>
 
-          <section className="report-form__section">
+                    <section className="report-form__section">
             <div className="report-form__section-heading">
               <span>03</span>
 
               <div>
                 <h3>
-                  Accountant’s report
+                  Professional adviser
                 </h3>
 
                 <p>
-                  This wording can be
-                  completed later before
-                  final printing.
+                  These details appear in
+                  the professional advisers
+                  and accountant&apos;s report
+                  sections of the complete
+                  financial statements.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-form__grid">
+              <label className="form-field">
+                <span>
+                  Accountant or preparer
+                  name
+                </span>
+
+                <input
+                  maxLength={180}
+                  value={
+                    values.accountantName
+                  }
+                  placeholder="Example: John Mensah"
+                  onChange={(event) =>
+                    setField(
+                      "accountantName",
+                      event.target.value,
+                    )
+                  }
+                />
+
+                <small>
+                  The individual responsible
+                  for preparing or certifying
+                  the financial statements.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Accounting firm
+                </span>
+
+                <input
+                  maxLength={180}
+                  value={
+                    values.accountantFirmName
+                  }
+                  placeholder="Example: ABC Consultancy Services"
+                  onChange={(event) =>
+                    setField(
+                      "accountantFirmName",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Professional designation
+                </span>
+
+                <input
+                  maxLength={180}
+                  value={
+                    values
+                      .accountantProfessionalDesignation
+                  }
+                  placeholder="Example: Chartered Accountants"
+                  onChange={(event) =>
+                    setField(
+                      "accountantProfessionalDesignation",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+
+              <label className="form-field form-field--full">
+                <span>
+                  Accounting firm address
+                </span>
+
+                <textarea
+                  rows={4}
+                  maxLength={2000}
+                  value={
+                    values
+                      .accountantFirmAddress
+                  }
+                  placeholder="Postal or office address of the accountant or accounting firm"
+                  onChange={(event) =>
+                    setField(
+                      "accountantFirmAddress",
+                      event.target.value,
+                    )
+                  }
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="report-form__section">
+            <div className="report-form__section-heading">
+              <span>04</span>
+
+              <div>
+                <h3>
+                  Accountant&apos;s report
+                </h3>
+
+                <p>
+                  Enter the preparation,
+                  certification or accountant
+                  report wording that should
+                  appear in the complete
+                  financial statements.
                 </p>
               </div>
             </div>
 
             <label className="form-field">
               <span>
-                Accountant’s report or
+                Accountant&apos;s report or
                 certification text
               </span>
 
               <textarea
-                rows={8}
+                rows={10}
                 maxLength={20000}
                 value={
                   values.accountantReportText
                 }
-                placeholder="Optional at this stage"
+                placeholder="Enter the accountant's report or certification wording"
                 onChange={(event) =>
                   setField(
                     "accountantReportText",
@@ -760,6 +921,14 @@ export function FinancialReportEditor({
                   )
                 }
               />
+
+              <small>
+                This information is stored
+                with the financial report,
+                so different reporting years
+                may use different accountants
+                or wording.
+              </small>
             </label>
           </section>
 
