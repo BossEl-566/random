@@ -33,6 +33,10 @@ type CompanyFormValues = {
   registrationNumber: string;
   tin: string;
   ghanaCardNumber: string;
+
+  principalName: string;
+  principalTitle: string;
+
   address: string;
   telephone: string;
   email: string;
@@ -55,6 +59,15 @@ function getInitialValues(
     ghanaCardNumber:
       company?.ghana_card_number ??
       "",
+
+    principalName:
+      company?.principal_name ??
+      "",
+
+    principalTitle:
+      company?.principal_title ??
+      "",
+
     address: company?.address ?? "",
     telephone:
       company?.telephone ?? "",
@@ -172,6 +185,17 @@ export function CompanyEditor({
         nullableText(
           values.ghanaCardNumber,
         ),
+
+      principal_name:
+        nullableText(
+          values.principalName,
+        ),
+
+      principal_title:
+        nullableText(
+          values.principalTitle,
+        ),
+
       address: nullableText(
         values.address,
       ),
@@ -471,6 +495,81 @@ export function CompanyEditor({
           <section className="company-form__section">
             <div className="company-form__section-heading">
               <span>02</span>
+
+              <div>
+                <h3>
+                  Proprietor or management
+                </h3>
+
+                <p>
+                  Enter the person who should
+                  appear as the proprietor,
+                  director or responsible
+                  management person in the
+                  complete financial
+                  statements.
+                </p>
+              </div>
+            </div>
+
+            <div className="company-form__grid">
+              <label className="form-field">
+                <span>
+                  Principal name
+                </span>
+
+                <input
+                  maxLength={180}
+                  value={
+                    values.principalName
+                  }
+                  placeholder="Example: Eric Adjei"
+                  onChange={(event) =>
+                    setField(
+                      "principalName",
+                      event.target.value,
+                    )
+                  }
+                />
+
+                <small>
+                  This may be the proprietor,
+                  director, trustee or other
+                  responsible person.
+                </small>
+              </label>
+
+              <label className="form-field">
+                <span>
+                  Principal title
+                </span>
+
+                <input
+                  maxLength={120}
+                  value={
+                    values.principalTitle
+                  }
+                  placeholder="Example: Proprietor"
+                  onChange={(event) =>
+                    setField(
+                      "principalTitle",
+                      event.target.value,
+                    )
+                  }
+                />
+
+                <small>
+                  Examples: Proprietor,
+                  Managing Director, Director
+                  or Trustee.
+                </small>
+              </label>
+            </div>
+          </section>
+
+          <section className="company-form__section">
+            <div className="company-form__section-heading">
+              <span>03</span>
               <div>
                 <h3>
                   Address and contact

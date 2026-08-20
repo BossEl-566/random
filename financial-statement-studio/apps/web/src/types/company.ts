@@ -60,7 +60,11 @@ export type Company = {
   business_type: BusinessType;
   registration_number: string | null;
   tin: string | null;
-  ghana_card_number: string | null;
+   ghana_card_number: string | null;
+
+  principal_name: string | null;
+  principal_title: string | null;
+
   address: string | null;
   telephone: string | null;
   email: string | null;
@@ -85,6 +89,10 @@ export type CompanyCreatePayload = {
   registration_number?: string | null;
   tin?: string | null;
   ghana_card_number?: string | null;
+
+  principal_name?: string | null;
+  principal_title?: string | null;
+
   address?: string | null;
   telephone?: string | null;
   email?: string | null;
