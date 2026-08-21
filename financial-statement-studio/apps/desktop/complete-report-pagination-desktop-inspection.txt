@@ -1,3 +1,23 @@
+===== DESKTOP PACKAGE =====
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for Financial Statement Studio.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron .",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "electron": "^43.1.1",
+    "typescript": "^5.9.3"
+  }
+}
+
+===== ELECTRON MAIN =====
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -540,4 +560,69 @@ app.on(
       },
     );
   },
+);
+===== PRELOAD =====
+import {
+  contextBridge,
+  ipcRenderer,
+} from "electron";
+
+const PRINT_CURRENT_PAGE_CHANNEL =
+  "desktop:print-current-page";
+
+const SAVE_CURRENT_PAGE_AS_PDF_CHANNEL =
+  "desktop:save-current-page-as-pdf";
+
+type DesktopPrintRequest = {
+  documentTitle: string;
+  suggestedFileName: string;
+};
+
+type DesktopOperationStatus =
+  | "success"
+  | "cancelled"
+  | "error";
+
+type DesktopOperationResult = {
+  status: DesktopOperationStatus;
+  message: string;
+  filePath?: string;
+};
+
+const desktopApi = {
+  isElectron: true,
+
+  platform: process.platform,
+
+  versions: {
+    electron:
+      process.versions.electron,
+    chrome:
+      process.versions.chrome,
+    node:
+      process.versions.node,
+  },
+
+  printCurrentPage(
+    request: DesktopPrintRequest,
+  ): Promise<DesktopOperationResult> {
+    return ipcRenderer.invoke(
+      PRINT_CURRENT_PAGE_CHANNEL,
+      request,
+    ) as Promise<DesktopOperationResult>;
+  },
+
+  saveCurrentPageAsPdf(
+    request: DesktopPrintRequest,
+  ): Promise<DesktopOperationResult> {
+    return ipcRenderer.invoke(
+      SAVE_CURRENT_PAGE_AS_PDF_CHANNEL,
+      request,
+    ) as Promise<DesktopOperationResult>;
+  },
+};
+
+contextBridge.exposeInMainWorld(
+  "desktopAPI",
+  desktopApi,
 );

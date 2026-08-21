@@ -1,0 +1,373 @@
+===== FINANCIAL STATEMENT TYPES =====
+export type MoneyValue =
+  | string
+  | number;
+
+export type FinancialStatementLine = {
+  ledger_account_id: string | null;
+  account_code: string | null;
+  account_name: string;
+  report_category: string;
+  amount: MoneyValue;
+  is_calculated: boolean;
+};
+
+export type FinancialStatementSection = {
+  key: string;
+  title: string;
+  items: FinancialStatementLine[];
+  total: MoneyValue;
+};
+
+export type ProfitOrLossStatement = {
+  financial_report_id: string;
+  company_id: string;
+  currency: string;
+
+  period_start: string;
+  period_end: string;
+
+  sections: FinancialStatementSection[];
+
+  revenue: MoneyValue;
+  direct_costs: MoneyValue;
+  gross_profit: MoneyValue;
+
+  other_income: MoneyValue;
+
+  administrative_expenses: MoneyValue;
+  selling_distribution_expenses: MoneyValue;
+
+  operating_profit: MoneyValue;
+
+  finance_costs: MoneyValue;
+  profit_before_tax: MoneyValue;
+
+  taxation: MoneyValue;
+  profit_after_tax: MoneyValue;
+
+  generated_at: string;
+};
+
+export type StatementOfFinancialPosition = {
+  financial_report_id: string;
+  company_id: string;
+  currency: string;
+
+  as_of: string;
+
+  sections: FinancialStatementSection[];
+
+  current_assets: MoneyValue;
+  non_current_assets: MoneyValue;
+  total_assets: MoneyValue;
+
+  current_liabilities: MoneyValue;
+  non_current_liabilities: MoneyValue;
+  total_liabilities: MoneyValue;
+
+  recorded_equity: MoneyValue;
+  current_year_profit: MoneyValue;
+  total_equity: MoneyValue;
+
+  total_liabilities_and_equity: MoneyValue;
+
+  accounting_equation_difference: MoneyValue;
+  is_balanced: boolean;
+
+  generated_at: string;
+};
+===== FINANCIAL STATEMENT API =====
+import { apiRequest } from "@/lib/api";
+import type {
+  ProfitOrLossStatement,
+  StatementOfFinancialPosition,
+} from "@/types/financial-statement";
+
+function buildAsOfQuery(
+  asOf?: string,
+): string {
+  if (!asOf) {
+    return "";
+  }
+
+  const searchParameters =
+    new URLSearchParams();
+
+  searchParameters.set(
+    "as_of",
+    asOf,
+  );
+
+  return `?${searchParameters.toString()}`;
+}
+
+export async function getProfitOrLossStatement(
+  reportId: string,
+  asOf?: string,
+): Promise<ProfitOrLossStatement> {
+  return apiRequest<ProfitOrLossStatement>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/statements/profit-or-loss${buildAsOfQuery(
+      asOf,
+    )}`,
+  );
+}
+
+export async function getStatementOfFinancialPosition(
+  reportId: string,
+  asOf?: string,
+): Promise<StatementOfFinancialPosition> {
+  return apiRequest<StatementOfFinancialPosition>(
+    `/api/financial-reports/${encodeURIComponent(
+      reportId,
+    )}/statements/financial-position${buildAsOfQuery(
+      asOf,
+    )}`,
+  );
+}
+===== STATEMENT SECTION COMPONENT =====
+import {
+  formatStatementMoney,
+} from "@/components/financial-statements/statement-utils";
+import type {
+  FinancialStatementSection,
+} from "@/types/financial-statement";
+
+type StatementSectionProps = {
+  section: FinancialStatementSection;
+  currency: string;
+  hideWhenEmpty?: boolean;
+};
+
+export function StatementSection({
+  section,
+  currency,
+  hideWhenEmpty = false,
+}: StatementSectionProps) {
+  const hasItems =
+    section.items.length > 0;
+
+  if (
+    hideWhenEmpty &&
+    !hasItems &&
+    Number(section.total) === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <section className="financial-statement-section">
+      <header>
+        <h3>
+          {section.title}
+        </h3>
+      </header>
+
+      <div className="financial-statement-lines">
+        {hasItems ? (
+          section.items.map(
+            (item, index) => (
+              <div
+                className={
+                  item.is_calculated
+                    ? "financial-statement-line financial-statement-line--calculated"
+                    : "financial-statement-line"
+                }
+                key={
+                  item.ledger_account_id ??
+                  `${section.key}-${index}`
+                }
+              >
+                <div>
+                  {item.account_code ? (
+                    <span>
+                      {item.account_code}
+                    </span>
+                  ) : null}
+
+                  <strong>
+                    {item.account_name}
+                  </strong>
+                </div>
+
+                <span className="financial-statement-line__amount">
+                  {formatStatementMoney(
+                    item.amount,
+                  )}
+                </span>
+              </div>
+            ),
+          )
+        ) : (
+          <div className="financial-statement-line financial-statement-line--empty">
+            <div>
+              <strong>
+                No balances recorded
+              </strong>
+            </div>
+
+            <span>
+              —
+            </span>
+          </div>
+        )}
+      </div>
+
+      <footer>
+        <strong>
+          Total {section.title}
+        </strong>
+
+        <strong>
+          <span className="financial-statement-currency">
+            {currency}
+          </span>
+
+          {formatStatementMoney(
+            section.total,
+          )}
+        </strong>
+      </footer>
+    </section>
+  );
+}
+===== SEARCH FOR SCHEDULE COMPONENTS =====
+src\app\reports\[reportId]\statements\financial-position\page.tsx:9:    "Review assets, liabilities and equity calculated from posted journal entries.",
+src\components\chart-of-accounts\chart-of-accounts-workspace.tsx:322:          ? `${response.created_count} default accounts were added. ${response.skipped_count} existing accounts were skipped.`
+src\components\chart-of-accounts\chart-of-accounts-workspace.tsx:323:          : `No new accounts were required. ${response.skipped_count} default accounts already exist.`;
+src\components\chart-of-accounts\chart-of-accounts-workspace.tsx:446:            mapped to the correct financial
+src\components\chart-of-accounts\chart-of-accounts-workspace.tsx:817:                  <div className="ledger-table-wrapper">
+src\components\chart-of-accounts\ledger-account-editor.tsx:211:        .toUpperCase();
+src\components\chart-of-accounts\ledger-account-editor.tsx:445:                        .toUpperCase(),
+src\components\companies\company-card.tsx:69:    .toUpperCase();
+src\components\companies\company-editor.tsx:166:        .toUpperCase();
+src\components\companies\company-editor.tsx:428:                        .toUpperCase(),
+src\components\companies\company-editor.tsx:506:                  appear as the proprietor,
+src\components\companies\company-editor.tsx:578:                  These details may appear
+src\components\companies\company-workspace.tsx:80:   * changes. The Effect starts a network request, and state updates happen
+src\components\companies\company-workspace.tsx:191:        "The company will disappear from the active list, but its historical records will not be deleted.",
+src\components\companies\company-workspace.tsx:468:                : "A company profile stores the business details that will later appear in its financial statements."}
+src\components\complete-report\complete-report-workspace.tsx:115:        letter.toUpperCase(),
+src\components\complete-report\complete-report-workspace.tsx:711:                  Supporting Schedules
+src\components\complete-report\complete-report-workspace.tsx:1318:                    Assets
+src\components\complete-report\complete-report-workspace.tsx:1323:                  "non_current_assets",
+src\components\complete-report\complete-report-workspace.tsx:1331:                        "non_current_assets",
+src\components\complete-report\complete-report-workspace.tsx:1338:                  "current_assets",
+src\components\complete-report\complete-report-workspace.tsx:1346:                        "current_assets",
+src\components\complete-report\complete-report-workspace.tsx:1355:                      Assets
+src\components\complete-report\complete-report-workspace.tsx:1359:                      Total Assets
+src\components\complete-report\complete-report-workspace.tsx:1372:                        .total_assets,
+src\components\complete-report\complete-report-workspace.tsx:1505:                        ? "Assets equal equity and liabilities"
+src\components\complete-report\complete-report-workspace.tsx:2397:                    supporting disclosures
+src\components\financial-reports\financial-report-editor.tsx:353:        .toUpperCase();
+src\components\financial-reports\financial-report-editor.tsx:601:                        .toUpperCase(),
+src\components\financial-reports\financial-report-editor.tsx:783:                  These details appear in
+src\components\financial-reports\financial-report-editor.tsx:898:                  appear in the complete
+src\components\financial-reports\financial-report-overview.tsx:409:        Review assets, liabilities, equity
+src\components\financial-reports\financial-report-overview.tsx:472:    explanatory notes and supporting
+src\components\financial-statements\cash-flow-workspace.tsx:236:                  "current_assets",
+src\components\financial-statements\cash-flow-workspace.tsx:302:              "current_assets",
+src\components\financial-statements\cash-flow-workspace.tsx:366:        "Select a current asset account to mark as cash or cash equivalent.",
+src\components\financial-statements\equity-account-table.tsx:33:      <div className="equity-account-table-wrapper">
+src\components\financial-statements\financial-position-workspace.tsx:444:                <span>Assets</span>
+src\components\financial-statements\financial-position-workspace.tsx:448:                "non_current_assets",
+src\components\financial-statements\financial-position-workspace.tsx:456:                      "non_current_assets",
+src\components\financial-statements\financial-position-workspace.tsx:463:                "current_assets",
+src\components\financial-statements\financial-position-workspace.tsx:471:                      "current_assets",
+src\components\financial-statements\financial-position-workspace.tsx:480:                    Assets
+src\components\financial-statements\financial-position-workspace.tsx:484:                    Total Assets
+src\components\financial-statements\financial-position-workspace.tsx:496:                    statement.total_assets,
+src\components\financial-statements\financial-position-workspace.tsx:626:                      ? "Assets equal equity and liabilities"
+src\components\journal\journal-entry-card.tsx:172:      <div className="journal-lines-table-wrapper">
+src\components\journal\trial-balance-workspace.tsx:234:        "asset",
+src\components\journal\trial-balance-workspace.tsx:542:            <div className="trial-balance-table-wrapper">
+src\components\notes\disclosure-template-library.tsx:270:            : `No new templates were required. ${response.skipped_count} existing templates were preserved.`,
+src\components\notes\disclosure-template-library.tsx:835:                  Templates will appear here
+src\components\notes\notes-workspace.tsx:318:            : `No new notes were required. ${noteResult.skipped_count} existing notes were preserved.`,
+src\components\notes\notes-workspace.tsx:974:                      Active notes will appear
+src\components\report-finalisation\finalise-report-dialog.tsx:65:    confirmationText.trim().toUpperCase() ===
+src\components\report-finalisation\report-finalisation-workspace.tsx:91:      letter.toUpperCase(),
+src\components\report-finalisation\report-finalisation-workspace.tsx:118:    return `${currency} ${amount.toFixed(
+src\components\report-finalisation\report-lock-banner.tsx:13:    status.charAt(0).toUpperCase() +
+src\components\report-finalisation\version-detail-dialog.tsx:95:    return `${currency} ${amount.toFixed(
+src\components\report-finalisation\version-detail-dialog.tsx:109:        letter.toUpperCase(),
+src\components\report-finalisation\version-detail-dialog.tsx:128:      ? `${rate.toFixed(2)}% of tax base`
+src\components\report-finalisation\version-detail-dialog.tsx:134:  return `Fixed amount: ${formatMoney(
+src\components\report-finalisation\version-detail-dialog.tsx:135:    calculation.fixed_amount_applied ??
+src\components\tax\post-tax-adjustment-dialog.tsx:62:    return `${currency} ${amount.toFixed(
+src\components\tax\tax-calculation-workspace.tsx:125:    return `${currency} ${amount.toFixed(
+src\components\tax\tax-calculation-workspace.tsx:144:  return `${amount.toFixed(2)}%`;
+src\components\tax\tax-calculation-workspace.tsx:155:        letter.toUpperCase(),
+src\components\tax\tax-calculation-workspace.tsx:490:        numericTaxBase.toFixed(
+src\components\tax\tax-calculation-workspace.tsx:756:                  percentage or fixed-amount
+src\components\tax\tax-calculation-workspace.tsx:991:                    Fixed amount:{" "}
+src\components\tax\tax-calculation-workspace.tsx:993:                      preview.fixed_amount_applied ??
+src\components\tax\tax-calculation-workspace.tsx:1187:                          Fixed amount:{" "}
+src\components\tax\tax-calculation-workspace.tsx:1190:                              .fixed_amount_applied ??
+src\components\tax\tax-computation-report-workspace.tsx:134:    return `${currency} ${amount.toFixed(
+src\components\tax\tax-computation-report-workspace.tsx:148:        letter.toUpperCase(),
+src\components\tax\tax-computation-report-workspace.tsx:166:      ? `${rate.toFixed(2)}%`
+src\components\tax\tax-computation-report-workspace.tsx:173:    calculation.fixed_amount_applied ??
+src\components\tax\tax-computation-report-workspace.tsx:921:                  <div className="tax-computation-table-wrapper">
+src\components\tax\tax-computation-report-workspace.tsx:942:                            Rate or fixed amount
+src\components\tax\tax-computation-report-workspace.tsx:1233:                  <div className="tax-computation-table-wrapper">
+src\components\tax\tax-profile-editor.tsx:140:        .toUpperCase()
+src\components\tax\tax-profile-editor.tsx:149:        .toUpperCase();
+src\components\tax\tax-profile-editor.tsx:337:                        .toUpperCase(),
+src\components\tax\tax-profile-editor.tsx:430:                        .toUpperCase(),
+src\components\tax\tax-reconciliation-workspace.tsx:87:    return `${currency} ${amount.toFixed(
+src\components\tax\tax-reconciliation-workspace.tsx:124:        letter.toUpperCase(),
+src\components\tax\tax-rule-editor.tsx:44:  fixedAmount: string;
+src\components\tax\tax-rule-editor.tsx:77:      fixedAmount:
+src\components\tax\tax-rule-editor.tsx:78:        rule.fixed_amount ?? "",
+src\components\tax\tax-rule-editor.tsx:115:    fixedAmount: "",
+src\components\tax\tax-rule-editor.tsx:242:        fixedAmount:
+src\components\tax\tax-rule-editor.tsx:244:          "fixed_amount"
+src\components\tax\tax-rule-editor.tsx:246:                .fixedAmount
+src\components\tax\tax-rule-editor.tsx:262:        .toUpperCase()
+src\components\tax\tax-rule-editor.tsx:277:        .toUpperCase();
+src\components\tax\tax-rule-editor.tsx:369:      "fixed_amount"
+src\components\tax\tax-rule-editor.tsx:371:      const fixedAmount =
+src\components\tax\tax-rule-editor.tsx:373:          values.fixedAmount,
+src\components\tax\tax-rule-editor.tsx:378:          fixedAmount,
+src\components\tax\tax-rule-editor.tsx:380:        fixedAmount < 0
+src\components\tax\tax-rule-editor.tsx:383:          "Fixed amount must be zero or greater.",
+src\components\tax\tax-rule-editor.tsx:444:            fixed_amount:
+src\components\tax\tax-rule-editor.tsx:447:              "fixed_amount"
+src\components\tax\tax-rule-editor.tsx:449:                    .fixedAmount
+src\components\tax\tax-rule-editor.tsx:635:                        .toUpperCase(),
+src\components\tax\tax-rule-editor.tsx:741:                        .toUpperCase(),
+src\components\tax\tax-rule-editor.tsx:760:                  of the tax base or one fixed
+src\components\tax\tax-rule-editor.tsx:835:                    Fixed amount
+src\components\tax\tax-rule-editor.tsx:848:                      values.fixedAmount
+src\components\tax\tax-rule-editor.tsx:853:                        "fixedAmount",
+src\components\tax\tax-rule-register.tsx:122:      ? `${rate.toFixed(2)}%`
+src\components\tax\tax-rule-register.tsx:127:    rule.fixed_amount ?? "0",
+src\components\tax\tax-rule-register.tsx:140:        letter.toUpperCase(),
+src\components\tax\tax-rule-register.tsx:687:                      : "Fixed tax amount"}
+src\types\financial-statement.ts:60:  current_assets: MoneyValue;
+src\types\financial-statement.ts:61:  non_current_assets: MoneyValue;
+src\types\financial-statement.ts:62:  total_assets: MoneyValue;
+src\types\ledger-account.ts:3:    value: "asset",
+src\types\ledger-account.ts:4:    label: "Assets",
+src\types\ledger-account.ts:62:    value: "current_assets",
+src\types\ledger-account.ts:63:    label: "Current assets",
+src\types\ledger-account.ts:66:    value: "non_current_assets",
+src\types\ledger-account.ts:67:    label: "Non-current assets",
+src\types\ledger-account.ts:144:  current_assets: "asset",
+src\types\ledger-account.ts:145:  non_current_assets: "asset",
+src\types\ledger-account.ts:157:  asset: "debit",
+src\types\ledger-account.ts:199:  skipped_count: number;
+src\types\notes.ts:89:  skipped_count: number;
+src\types\notes.ts:142:  skipped_count: number;
+src\types\report-finalisation.ts:98:    | "fixed_amount"
+src\types\report-finalisation.ts:105:  fixed_amount_applied:
+src\types\tax-configuration.ts:6:  | "fixed_amount";
+src\types\tax-configuration.ts:19:    value: "fixed_amount",
+src\types\tax-configuration.ts:20:    label: "Fixed amount",
+src\types\tax-configuration.ts:107:  fixed_amount: string | null;
+src\types\tax-configuration.ts:138:  fixed_amount: string | null;
+src\types\tax-configuration.ts:198:  fixed_amount_applied:
+src\types\tax-configuration.ts:226:  fixed_amount_applied:

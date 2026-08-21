@@ -1,3 +1,205 @@
+===== STATEMENT PRINT ACTIONS =====
+"use client";
+
+import {
+  useState,
+} from "react";
+
+type StatementPrintActionsProps = {
+  documentTitle: string;
+  suggestedFileName: string;
+  disabled?: boolean;
+};
+
+type ActiveAction =
+  | "print"
+  | "pdf"
+  | null;
+
+type StatusMessage = {
+  type:
+    | "success"
+    | "cancelled"
+    | "error"
+    | "info";
+  message: string;
+} | null;
+
+export function StatementPrintActions({
+  documentTitle,
+  suggestedFileName,
+  disabled = false,
+}: StatementPrintActionsProps) {
+  const [
+    activeAction,
+    setActiveAction,
+  ] = useState<ActiveAction>(
+    null,
+  );
+
+  const [
+    statusMessage,
+    setStatusMessage,
+  ] = useState<StatusMessage>(
+    null,
+  );
+
+  const isBusy =
+    activeAction !== null;
+
+  const request:
+    DesktopPrintRequest = {
+      documentTitle,
+      suggestedFileName,
+    };
+
+  async function handlePrint(): Promise<void> {
+    setActiveAction("print");
+    setStatusMessage(null);
+
+    try {
+      if (
+        window.desktopAPI
+          ?.isElectron
+      ) {
+        const result =
+          await window.desktopAPI
+            .printCurrentPage(
+              request,
+            );
+
+        setStatusMessage({
+          type: result.status,
+          message:
+            result.message,
+        });
+
+        return;
+      }
+
+      window.print();
+
+      setStatusMessage({
+        type: "info",
+        message:
+          "The browser print dialog was opened.",
+      });
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The statement could not be printed.",
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  async function handleSavePdf(): Promise<void> {
+    setActiveAction("pdf");
+    setStatusMessage(null);
+
+    try {
+      if (
+        window.desktopAPI
+          ?.isElectron
+      ) {
+        const result =
+          await window.desktopAPI
+            .saveCurrentPageAsPdf(
+              request,
+            );
+
+        setStatusMessage({
+          type: result.status,
+          message:
+            result.status ===
+              "success" &&
+            result.filePath
+              ? `${result.message} ${result.filePath}`
+              : result.message,
+        });
+
+        return;
+      }
+
+      window.print();
+
+      setStatusMessage({
+        type: "info",
+        message:
+          "Choose “Save as PDF” in the browser print dialog.",
+      });
+    } catch (error) {
+      setStatusMessage({
+        type: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "The statement could not be saved as a PDF.",
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }
+
+  return (
+    <div className="statement-print-actions">
+      <div className="statement-print-actions__buttons">
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={
+            disabled ||
+            isBusy
+          }
+          onClick={() => {
+            void handlePrint();
+          }}
+        >
+          {activeAction ===
+          "print"
+            ? "Opening printer..."
+            : "Print statement"}
+        </button>
+
+        <button
+          className="primary-button"
+          type="button"
+          disabled={
+            disabled ||
+            isBusy
+          }
+          onClick={() => {
+            void handleSavePdf();
+          }}
+        >
+          {activeAction === "pdf"
+            ? "Creating PDF..."
+            : "Save as PDF"}
+        </button>
+      </div>
+
+      {statusMessage ? (
+        <p
+          className={`statement-print-actions__status statement-print-actions__status--${statusMessage.type}`}
+          role={
+            statusMessage.type ===
+            "error"
+              ? "alert"
+              : "status"
+          }
+          aria-live="polite"
+        >
+          {statusMessage.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+===== COMPLETE REPORT WORKSPACE =====
 "use client";
 
 import Link from "next/link";
@@ -3206,4 +3408,157 @@ export function CompleteReportWorkspace({
       ) : null}
     </main>
   );
+}
+===== PRINT-RELATED GLOBAL CSS =====
+423:@media (max-width: 960px) {
+442:@media (max-width: 640px) {
+1254:@media (max-width: 1000px) {
+1279:@media (max-width: 680px) {
+1604:.report-status--printed {
+2013:@media (max-width: 1050px) {
+2031:@media (max-width: 760px) {
+2709:@media (max-width: 1080px) {
+2720:@media (max-width: 760px) {
+3774:@media (max-width: 1180px) {
+3785:@media (max-width: 820px) {
+3976:@media (max-width: 620px) {
+4053:.financial-statement-document {
+4063:.financial-statement-document__header {
+4072:.financial-statement-document__header p {
+4081:.financial-statement-document__header h1 {
+4088:.financial-statement-document__header > div:first-child > span {
+4095:.financial-statement-document__currency {
+4100:.financial-statement-document__currency span {
+4109:.financial-statement-document__currency strong {
+4113:.financial-statement-document__body {
+4365:.financial-statement-document__footer {
+4425:@media (max-width: 760px) {
+4442:  .financial-statement-document {
+4446:  .financial-statement-document__header {
+4452:  .financial-statement-document__currency {
+4456:  .financial-statement-document__body {
+4477:  .financial-statement-document__footer {
+4482:  .financial-statement-document__footer {
+4487:@media print {
+4488:  @page {
+4513:  .financial-statement-document {
+4520:  .financial-statement-document__header {
+4524:  .financial-statement-document__body {
+4528:  .financial-statement-document__footer {
+4537:    break-inside: avoid;
+4542:    break-inside: avoid;
+4546:.statement-print-actions {
+4553:.statement-print-actions__buttons {
+4559:.statement-print-actions__status {
+4568:.statement-print-actions__status--success {
+4572:.statement-print-actions__status--cancelled,
+4573:.statement-print-actions__status--info {
+4577:.statement-print-actions__status--error {
+4581:@media (max-width: 760px) {
+4582:  .statement-print-actions {
+4587:  .statement-print-actions__buttons {
+4593:  .statement-print-actions__status {
+4599:@media print {
+4600:  .statement-print-actions {
+4831:@media (max-width: 760px) {
+4876:@media print {
+4880:    break-inside: avoid;
+5131:@media (max-width: 760px) {
+5149:@media print {
+5154:    break-inside: avoid;
+5158:    break-inside: auto;
+5556:.printable-report-note {
+5557:  break-inside: avoid;
+5560:.printable-report-note > header {
+5571:.printable-report-note > header > span {
+5583:.printable-report-note h2 {
+5589:.printable-report-note header small {
+5599:.printable-report-note__content {
+5603:.printable-report-note__content p {
+5611:.printable-report-note > footer {
+5775:@media (max-width: 900px) {
+5808:@media (max-width: 680px) {
+5831:  .printable-report-note__content,
+5832:  .printable-report-note > footer {
+5838:@media print {
+5856:  .printable-report-note {
+5857:    break-inside: avoid;
+5860:  .printable-report-note__content p {
+6182:@media (max-width: 960px) {
+6201:@media (max-width: 680px) {
+6886:@media (max-width: 900px) {
+6913:@media (max-width: 620px) {
+7172:@media (max-width: 880px) {
+7184:@media (max-width: 640px) {
+7202:@media print {
+7211:    break-inside: auto;
+7226:    break-inside: avoid;
+7248:    break-inside: avoid;
+7268:    break-inside: avoid;
+7304:.complete-report-document {
+7311:.complete-report-sheet {
+7612:@media (max-width: 760px) {
+7613:  .complete-report-document {
+7617:  .complete-report-sheet {
+7640:@media print {
+7649:  .complete-report-document {
+7655:  .complete-report-sheet {
+7663:    break-after: page;
+7664:    page-break-after: always;
+7667:  .complete-report-sheet:last-child {
+7668:    break-after: auto;
+7669:    page-break-after: auto;
+7735:@media print {
+7747:    break-inside: avoid;
+7754:    break-inside: avoid;
+7813:@media print {
+7816:    break-inside: avoid;
+7820:    break-inside: avoid;
+7849:@media print {
+7855:    break-inside: auto;
+7856:    page-break-inside: auto;
+7861:    break-inside: avoid;
+7862:    page-break-inside: avoid;
+7866:    .printable-report-note__content
+7974:@media print {
+7980:    break-inside: avoid;
+7981:    page-break-inside: avoid;
+7993:    break-inside: avoid;
+7994:    page-break-inside: avoid;
+8162:@media (max-width: 640px) {
+8177:@media print {
+8185:    break-inside: avoid;
+8186:    page-break-inside: avoid;
+8190:    break-inside: avoid;
+8191:    page-break-inside: avoid;
+8195:   Complete Report — Print Actions
+8206:@media (max-width: 760px) {
+8218:@media print {
+
+===== WEB PACKAGE =====
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
 }

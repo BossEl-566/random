@@ -1,0 +1,1170 @@
+===== LEDGER ACCOUNT MODEL =====
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    true,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.core.database import Base
+from app.models.mixins import PrimaryKeyMixin, TimestampMixin
+
+
+if TYPE_CHECKING:
+    from app.models.company import Company
+    from app.models.journal_line import JournalLine
+
+
+class LedgerAccount(
+    PrimaryKeyMixin,
+    TimestampMixin,
+    Base,
+):
+    """
+    One account within a company's Chart of Accounts.
+
+    Examples include Bank, Sales Revenue, Accounts Payable,
+    Salaries, Motor Vehicles and Owner's Capital.
+    """
+
+    __tablename__ = "ledger_accounts"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "account_code",
+            name="company_account_code",
+        ),
+        CheckConstraint(
+            "display_order >= 0",
+            name="display_order_non_negative",
+        ),
+    )
+
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "companies.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    parent_account_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey(
+            "ledger_accounts.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    account_code: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    account_name: Mapped[str] = mapped_column(
+        String(180),
+        nullable=False,
+        index=True,
+    )
+
+    account_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        index=True,
+    )
+
+    report_category: Mapped[str] = mapped_column(
+        String(60),
+        nullable=False,
+        index=True,
+    )
+
+    cash_flow_category: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        index=True,
+    )
+
+    normal_balance: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    is_system_account: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+        index=True,
+    )
+
+    is_cash_equivalent: Mapped[bool] = mapped_column(
+    Boolean,
+    nullable=False,
+    default=False,
+    server_default="0",
+    index=True,
+)
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+        index=True,
+    )
+
+    display_order: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    company: Mapped[Company] = relationship(
+        "Company",
+        back_populates="ledger_accounts",
+    )
+
+    journal_lines: Mapped[list[JournalLine]] = relationship(
+    "JournalLine",
+    back_populates="ledger_account",
+)
+
+    parent_account: Mapped[LedgerAccount | None] = relationship(
+        "LedgerAccount",
+        remote_side="LedgerAccount.id",
+        foreign_keys=[parent_account_id],
+        back_populates="child_accounts",
+    )
+
+    child_accounts: Mapped[list[LedgerAccount]] = relationship(
+        "LedgerAccount",
+        foreign_keys=[parent_account_id],
+        back_populates="parent_account",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"LedgerAccount(id={self.id!r}, "
+            f"code={self.account_code!r}, "
+            f"name={self.account_name!r})"
+        )
+===== LEDGER ACCOUNT SCHEMAS =====
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+)
+
+
+class AccountType(StrEnum):
+    """Main accounting classifications."""
+
+    ASSET = "asset"
+    LIABILITY = "liability"
+    EQUITY = "equity"
+    REVENUE = "revenue"
+    EXPENSE = "expense"
+
+
+class ReportCategory(StrEnum):
+    """Financial-statement sections used by the reporting engine."""
+
+    REVENUE = "revenue"
+    COST_OF_SALES = "cost_of_sales"
+    DIRECT_SERVICE_COSTS = "direct_service_costs"
+    MANUFACTURING_COSTS = "manufacturing_costs"
+    OTHER_INCOME = "other_income"
+
+    ADMINISTRATIVE_EXPENSES = (
+        "administrative_expenses"
+    )
+    SELLING_DISTRIBUTION_EXPENSES = (
+        "selling_distribution_expenses"
+    )
+    FINANCE_COSTS = "finance_costs"
+    TAXATION = "taxation"
+
+    CURRENT_ASSETS = "current_assets"
+    NON_CURRENT_ASSETS = "non_current_assets"
+    CURRENT_LIABILITIES = "current_liabilities"
+    NON_CURRENT_LIABILITIES = (
+        "non_current_liabilities"
+    )
+    EQUITY = "equity"
+
+
+class CashFlowCategory(StrEnum):
+    """Cash-flow classification for an account."""
+
+    OPERATING = "operating"
+    INVESTING = "investing"
+    FINANCING = "financing"
+    NON_CASH = "non_cash"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class NormalBalance(StrEnum):
+    """The side on which an account normally increases."""
+
+    DEBIT = "debit"
+    CREDIT = "credit"
+
+
+def clean_required_text(value: str) -> str:
+    cleaned_value = " ".join(value.split())
+
+    if not cleaned_value:
+        raise ValueError(
+            "This field cannot be empty.",
+        )
+
+    return cleaned_value
+
+
+def clean_account_code(value: str) -> str:
+    cleaned_value = value.strip().upper()
+
+    if not cleaned_value:
+        raise ValueError(
+            "Account code cannot be empty.",
+        )
+
+    return cleaned_value
+
+
+def clean_optional_text(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+
+    cleaned_value = value.strip()
+
+    return cleaned_value or None
+
+
+class LedgerAccountCreate(BaseModel):
+    """Payload for creating a custom ledger account."""
+
+    account_code: str = Field(
+        min_length=1,
+        max_length=30,
+    )
+
+    account_name: str = Field(
+        min_length=2,
+        max_length=180,
+    )
+
+    account_type: AccountType
+    report_category: ReportCategory
+
+    cash_flow_category: CashFlowCategory | None = None
+
+    normal_balance: NormalBalance
+
+    parent_account_id: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    display_order: int = Field(
+        default=0,
+        ge=0,
+        le=100000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+    is_cash_equivalent: bool = False
+
+    @field_validator("account_code")
+    @classmethod
+    def validate_account_code(
+        cls,
+        value: str,
+    ) -> str:
+        return clean_account_code(value)
+
+    @field_validator("account_name")
+    @classmethod
+    def validate_account_name(
+        cls,
+        value: str,
+    ) -> str:
+        return clean_required_text(value)
+
+    @field_validator(
+        "parent_account_id",
+        "description",
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+
+class LedgerAccountUpdate(BaseModel):
+    """Payload for partially updating a ledger account."""
+
+    account_code: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=30,
+    )
+
+    account_name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=180,
+    )
+
+    account_type: AccountType | None = None
+    report_category: ReportCategory | None = None
+
+    cash_flow_category: CashFlowCategory | None = None
+
+    normal_balance: NormalBalance | None = None
+
+    parent_account_id: str | None = Field(
+        default=None,
+        min_length=36,
+        max_length=36,
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    display_order: int | None = Field(
+        default=None,
+        ge=0,
+        le=100000,
+    )
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+    is_cash_equivalent: bool | None = None
+
+    @field_validator("account_code")
+    @classmethod
+    def validate_account_code(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return clean_account_code(value)
+
+    @field_validator("account_name")
+    @classmethod
+    def validate_account_name(
+        cls,
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return clean_required_text(value)
+
+    @field_validator(
+        "parent_account_id",
+        "description",
+        mode="before",
+    )
+    @classmethod
+    def validate_optional_text(
+        cls,
+        value: Any,
+    ) -> Any:
+        return clean_optional_text(value)
+
+
+class LedgerAccountResponse(BaseModel):
+    """Ledger account returned by the API."""
+
+    id: str
+    company_id: str
+    parent_account_id: str | None
+
+    account_code: str
+    account_name: str
+
+    account_type: AccountType
+    report_category: ReportCategory
+    cash_flow_category: CashFlowCategory | None
+    normal_balance: NormalBalance
+
+    description: str | None
+
+    is_system_account: bool
+    is_cash_equivalent: bool
+    is_active: bool
+    display_order: int
+
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
+
+class LedgerAccountListResponse(BaseModel):
+    """Paginated Chart of Accounts response."""
+
+    items: list[LedgerAccountResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class ChartInitializationResponse(BaseModel):
+    """Result of initializing a company's default accounts."""
+
+    company_id: str
+    business_template: str
+    created_count: int
+    skipped_count: int
+    items: list[LedgerAccountResponse]
+===== FINANCIAL STATEMENT CALCULATION SERVICE =====
+
+===== FINANCIAL STATEMENT SCHEMAS =====
+from datetime import date, datetime
+from decimal import Decimal
+from pydantic import BaseModel
+
+
+class FinancialStatementLine(BaseModel):
+    """
+    One ledger account displayed in a financial statement section.
+    """
+
+    ledger_account_id: str | None
+    account_code: str | None
+    account_name: str
+    report_category: str
+
+    amount: Decimal
+
+    is_calculated: bool = False
+
+
+class FinancialStatementSection(BaseModel):
+    """
+    A grouped financial-statement section.
+
+    Examples:
+    - Current assets
+    - Revenue
+    - Administrative expenses
+    """
+
+    key: str
+    title: str
+
+    items: list[FinancialStatementLine]
+
+    total: Decimal
+
+
+class ProfitOrLossResponse(BaseModel):
+    """
+    Calculated Statement of Profit or Loss.
+    """
+
+    financial_report_id: str
+    company_id: str
+    currency: str
+
+    period_start: date
+    period_end: date
+
+    sections: list[FinancialStatementSection]
+
+    revenue: Decimal
+    direct_costs: Decimal
+    gross_profit: Decimal
+
+    other_income: Decimal
+
+    administrative_expenses: Decimal
+    selling_distribution_expenses: Decimal
+
+    operating_profit: Decimal
+
+    finance_costs: Decimal
+    profit_before_tax: Decimal
+
+    taxation: Decimal
+    profit_after_tax: Decimal
+
+    generated_at: datetime
+
+
+class StatementOfFinancialPositionResponse(BaseModel):
+    """
+    Calculated Statement of Financial Position.
+    """
+
+    financial_report_id: str
+    company_id: str
+    currency: str
+
+    as_of: date
+
+    sections: list[FinancialStatementSection]
+
+    current_assets: Decimal
+    non_current_assets: Decimal
+    total_assets: Decimal
+
+    current_liabilities: Decimal
+    non_current_liabilities: Decimal
+    total_liabilities: Decimal
+
+    recorded_equity: Decimal
+    current_year_profit: Decimal
+    total_equity: Decimal
+
+    total_liabilities_and_equity: Decimal
+
+    accounting_equation_difference: Decimal
+    is_balanced: bool
+
+    generated_at: datetime
+===== TRIAL BALANCE SERVICE =====
+
+===== JOURNAL ENTRY MODEL =====
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
+
+from app.core.database import Base
+from app.models.mixins import (
+    PrimaryKeyMixin,
+    TimestampMixin,
+)
+
+
+if TYPE_CHECKING:
+    from app.models.company import Company
+    from app.models.financial_report import (
+        FinancialReport,
+    )
+    from app.models.journal_line import JournalLine
+
+
+class JournalEntry(
+    PrimaryKeyMixin,
+    TimestampMixin,
+    Base,
+):
+    """
+    Header record for one double-entry accounting transaction.
+
+    The actual debit and credit amounts are stored in JournalLine.
+    """
+
+    __tablename__ = "journal_entries"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "financial_report_id",
+            "sequence_number",
+            name="report_sequence_number",
+        ),
+        UniqueConstraint(
+            "financial_report_id",
+            "entry_number",
+            name="report_entry_number",
+        ),
+        CheckConstraint(
+            "sequence_number > 0",
+            name="sequence_number_positive",
+        ),
+    )
+
+    company_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "companies.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    financial_report_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey(
+            "financial_reports.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    sequence_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    entry_number: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        index=True,
+    )
+
+    entry_date: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        index=True,
+    )
+
+    entry_type: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="standard",
+        server_default="standard",
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="draft",
+        server_default="draft",
+        index=True,
+    )
+
+    source: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="manual",
+        server_default="manual",
+        index=True,
+    )
+
+    description: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    reference: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+    )
+
+    posted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    voided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    void_reason: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    company: Mapped[Company] = relationship(
+        "Company",
+        back_populates="journal_entries",
+    )
+
+    financial_report: Mapped[FinancialReport] = relationship(
+        "FinancialReport",
+        back_populates="journal_entries",
+    )
+
+    lines: Mapped[list[JournalLine]] = relationship(
+        "JournalLine",
+        back_populates="journal_entry",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="JournalLine.line_number",
+    )
+
+    @property
+    def total_debit(self) -> Decimal:
+        return sum(
+            (
+                line.debit
+                for line in self.lines
+            ),
+            Decimal("0.00"),
+        )
+
+    @property
+    def total_credit(self) -> Decimal:
+        return sum(
+            (
+                line.credit
+                for line in self.lines
+            ),
+            Decimal("0.00"),
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"JournalEntry(id={self.id!r}, "
+            f"entry_number={self.entry_number!r}, "
+            f"status={self.status!r})"
+        )
+===== JOURNAL LINE MODEL =====
+
+===== SEARCH FOR FIXED ASSET OR SCHEDULE CODE =====
+app\api\routes\ledger_accounts.py:119:            skipped_count,
+app\api\routes\ledger_accounts.py:135:        skipped_count=skipped_count,
+app\api\routes\tax_configuration.py:359:                    .upper()
+app\models\company.py:6:from sqlalchemy.orm import Mapped, mapped_column, relationship
+app\models\company.py:28:    name: Mapped[str] = mapped_column(
+app\models\company.py:34:    business_type: Mapped[str] = mapped_column(
+app\models\company.py:42:    registration_number: Mapped[str | None] = mapped_column(
+app\models\company.py:47:    tin: Mapped[str | None] = mapped_column(
+app\models\company.py:53:    ghana_card_number: Mapped[str | None] = mapped_column(
+app\models\company.py:58:    principal_name: Mapped[str | None] = mapped_column(
+app\models\company.py:63:    principal_title: Mapped[str | None] = mapped_column(
+app\models\company.py:68:    address: Mapped[str | None] = mapped_column(
+app\models\company.py:73:    telephone: Mapped[str | None] = mapped_column(
+app\models\company.py:78:    email: Mapped[str | None] = mapped_column(
+app\models\company.py:83:    default_currency: Mapped[str] = mapped_column(
+app\models\company.py:90:    reporting_basis: Mapped[str] = mapped_column(
+app\models\company.py:97:    logo_path: Mapped[str | None] = mapped_column(
+app\models\company.py:102:    is_active: Mapped[bool] = mapped_column(
+app\models\company.py:110:    financial_reports: Mapped[list[FinancialReport]] = relationship(
+app\models\company.py:117:    journal_entries: Mapped[list[JournalEntry]] = relationship(
+app\models\company.py:124:    ledger_accounts: Mapped[list[LedgerAccount]] = relationship(
+app\models\company.py:130:    tax_profiles: Mapped[list[TaxProfile]] = relationship(
+app\models\disclosure_template.py:16:    Mapped,
+app\models\disclosure_template.py:17:    mapped_column,
+app\models\disclosure_template.py:60:    template_key: Mapped[str] = mapped_column(
+app\models\disclosure_template.py:66:    title: Mapped[str] = mapped_column(
+app\models\disclosure_template.py:72:    note_type: Mapped[str] = mapped_column(
+app\models\disclosure_template.py:80:    statement_name: Mapped[str | None] = mapped_column(
+app\models\disclosure_template.py:86:    statement_line_key: Mapped[str | None] = mapped_column(
+app\models\disclosure_template.py:92:    default_content: Mapped[str] = mapped_column(
+app\models\disclosure_template.py:99:    is_system_template: Mapped[bool] = mapped_column(
+app\models\disclosure_template.py:107:    is_required: Mapped[bool] = mapped_column(
+app\models\disclosure_template.py:115:    is_active: Mapped[bool] = mapped_column(
+app\models\disclosure_template.py:123:    display_order: Mapped[int] = mapped_column(
+app\models\disclosure_template.py:130:    report_notes: Mapped[
+app\models\financial_report.py:16:    Mapped,
+app\models\financial_report.py:17:    mapped_column,
+app\models\financial_report.py:69:    company_id: Mapped[str] = mapped_column(
+app\models\financial_report.py:79:    comparison_report_id: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:89:    revision_series_id: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:95:    revision_number: Mapped[int] = mapped_column(
+app\models\financial_report.py:103:    supersedes_report_id: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:109:    revision_reason: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:114:    title: Mapped[str] = mapped_column(
+app\models\financial_report.py:120:    report_type: Mapped[str] = mapped_column(
+app\models\financial_report.py:128:    period_start: Mapped[date] = mapped_column(
+app\models\financial_report.py:133:    period_end: Mapped[date] = mapped_column(
+app\models\financial_report.py:138:    financial_year: Mapped[int] = mapped_column(
+app\models\financial_report.py:144:    currency: Mapped[str] = mapped_column(
+app\models\financial_report.py:151:    business_template: Mapped[str] = mapped_column(
+app\models\financial_report.py:159:    status: Mapped[str] = mapped_column(
+app\models\financial_report.py:167:    accountant_report_text: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:172:    accountant_name: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:177:    accountant_firm_name: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:182:    accountant_professional_designation: Mapped[
+app\models\financial_report.py:184:    ] = mapped_column(
+app\models\financial_report.py:189:    accountant_firm_address: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:194:    finalised_by: Mapped[str | None] = mapped_column(
+app\models\financial_report.py:199:    finalised_at: Mapped[datetime | None] = mapped_column(
+app\models\financial_report.py:204:    company: Mapped[Company] = relationship(
+app\models\financial_report.py:209:    journal_entries: Mapped[
+app\models\financial_report.py:218:    notes: Mapped[
+app\models\financial_report.py:227:    versions: Mapped[
+app\models\financial_report.py:239:    tax_calculations: Mapped[
+app\models\financial_report.py:249:    comparison_report: Mapped[
+app\models\financial_report.py:258:    comparison_dependents: Mapped[
+app\models\financial_report_note.py:16:    Mapped,
+app\models\financial_report_note.py:17:    mapped_column,
+app\models\financial_report_note.py:64:    financial_report_id: Mapped[str] = mapped_column(
+app\models\financial_report_note.py:74:    template_id: Mapped[str | None] = mapped_column(
+app\models\financial_report_note.py:84:    note_number: Mapped[int] = mapped_column(
+app\models\financial_report_note.py:90:    title: Mapped[str] = mapped_column(
+app\models\financial_report_note.py:96:    note_type: Mapped[str] = mapped_column(
+app\models\financial_report_note.py:104:    statement_name: Mapped[str | None] = mapped_column(
+app\models\financial_report_note.py:110:    statement_line_key: Mapped[str | None] = mapped_column(
+app\models\financial_report_note.py:116:    content: Mapped[str] = mapped_column(
+app\models\financial_report_note.py:123:    is_active: Mapped[bool] = mapped_column(
+app\models\financial_report_note.py:131:    financial_report: Mapped[
+app\models\financial_report_note.py:138:    template: Mapped[
+app\models\financial_report_version.py:16:    Mapped,
+app\models\financial_report_version.py:17:    mapped_column,
+app\models\financial_report_version.py:65:    financial_report_id: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:75:    revision_series_id: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:81:    revision_number: Mapped[int] = mapped_column(
+app\models\financial_report_version.py:86:    finalised_at: Mapped[datetime] = mapped_column(
+app\models\financial_report_version.py:92:    finalised_by: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:97:    accountant_name: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:102:    approval_notes: Mapped[str | None] = mapped_column(
+app\models\financial_report_version.py:107:    snapshot_json: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:112:    snapshot_checksum: Mapped[str] = mapped_column(
+app\models\financial_report_version.py:118:    financial_report: Mapped[
+app\models\journal_entry.py:18:    Mapped,
+app\models\journal_entry.py:19:    mapped_column,
+app\models\journal_entry.py:68:    company_id: Mapped[str] = mapped_column(
+app\models\journal_entry.py:78:    financial_report_id: Mapped[str] = mapped_column(
+app\models\journal_entry.py:88:    sequence_number: Mapped[int] = mapped_column(
+app\models\journal_entry.py:93:    entry_number: Mapped[str] = mapped_column(
+app\models\journal_entry.py:99:    entry_date: Mapped[date] = mapped_column(
+app\models\journal_entry.py:105:    entry_type: Mapped[str] = mapped_column(
+app\models\journal_entry.py:113:    status: Mapped[str] = mapped_column(
+app\models\journal_entry.py:121:    source: Mapped[str] = mapped_column(
+app\models\journal_entry.py:129:    description: Mapped[str] = mapped_column(
+app\models\journal_entry.py:134:    reference: Mapped[str | None] = mapped_column(
+app\models\journal_entry.py:140:    posted_at: Mapped[datetime | None] = mapped_column(
+app\models\journal_entry.py:145:    voided_at: Mapped[datetime | None] = mapped_column(
+app\models\journal_entry.py:150:    void_reason: Mapped[str | None] = mapped_column(
+app\models\journal_entry.py:155:    company: Mapped[Company] = relationship(
+app\models\journal_entry.py:160:    financial_report: Mapped[FinancialReport] = relationship(
+app\models\journal_entry.py:165:    lines: Mapped[list[JournalLine]] = relationship(
+app\models\journal_entry.py:173:    @property
+app\models\journal_entry.py:183:    @property
+app\models\journal_line.py:15:    Mapped,
+app\models\journal_line.py:16:    mapped_column,
+app\models\journal_line.py:71:    journal_entry_id: Mapped[str] = mapped_column(
+app\models\journal_line.py:81:    ledger_account_id: Mapped[str] = mapped_column(
+app\models\journal_line.py:91:    line_number: Mapped[int] = mapped_column(
+app\models\journal_line.py:96:    description: Mapped[str | None] = mapped_column(
+app\models\journal_line.py:101:    debit: Mapped[Decimal] = mapped_column(
+app\models\journal_line.py:111:    credit: Mapped[Decimal] = mapped_column(
+app\models\journal_line.py:121:    journal_entry: Mapped[JournalEntry] = relationship(
+app\models\journal_line.py:126:    ledger_account: Mapped[LedgerAccount] = relationship(
+app\models\ledger_account.py:15:from sqlalchemy.orm import Mapped, mapped_column, relationship
+app\models\ledger_account.py:52:    company_id: Mapped[str] = mapped_column(
+app\models\ledger_account.py:62:    parent_account_id: Mapped[str | None] = mapped_column(
+app\models\ledger_account.py:72:    account_code: Mapped[str] = mapped_column(
+app\models\ledger_account.py:78:    account_name: Mapped[str] = mapped_column(
+app\models\ledger_account.py:84:    account_type: Mapped[str] = mapped_column(
+app\models\ledger_account.py:90:    report_category: Mapped[str] = mapped_column(
+app\models\ledger_account.py:96:    cash_flow_category: Mapped[str | None] = mapped_column(
+app\models\ledger_account.py:102:    normal_balance: Mapped[str] = mapped_column(
+app\models\ledger_account.py:107:    description: Mapped[str | None] = mapped_column(
+app\models\ledger_account.py:112:    is_system_account: Mapped[bool] = mapped_column(
+app\models\ledger_account.py:120:    is_cash_equivalent: Mapped[bool] = mapped_column(
+app\models\ledger_account.py:128:    is_active: Mapped[bool] = mapped_column(
+app\models\ledger_account.py:136:    display_order: Mapped[int] = mapped_column(
+app\models\ledger_account.py:143:    company: Mapped[Company] = relationship(
+app\models\ledger_account.py:148:    journal_lines: Mapped[list[JournalLine]] = relationship(
+app\models\ledger_account.py:153:    parent_account: Mapped[LedgerAccount | None] = relationship(
+app\models\ledger_account.py:160:    child_accounts: Mapped[list[LedgerAccount]] = relationship(
+app\models\mixins.py:5:from sqlalchemy.orm import Mapped, mapped_column
+app\models\mixins.py:17:    id: Mapped[str] = mapped_column(
+app\models\mixins.py:27:    created_at: Mapped[datetime] = mapped_column(
+app\models\mixins.py:34:    updated_at: Mapped[datetime] = mapped_column(
+app\models\tax_calculation.py:17:    Mapped,
+app\models\tax_calculation.py:18:    mapped_column,
+app\models\tax_calculation.py:67:                "fixed_amount_applied IS NULL "
+app\models\tax_calculation.py:68:                "OR fixed_amount_applied >= 0"
+app\models\tax_calculation.py:70:            name="fixed_amount_applied_non_negative",
+app\models\tax_calculation.py:74:    financial_report_id: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:84:    tax_rule_id: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:94:    calculation_date: Mapped[date] = mapped_column(
+app\models\tax_calculation.py:100:    tax_base: Mapped[Decimal] = mapped_column(
+app\models\tax_calculation.py:108:    tax_amount: Mapped[Decimal] = mapped_column(
+app\models\tax_calculation.py:116:    currency: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:123:    rule_code_snapshot: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:128:    rule_name_snapshot: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:133:    tax_type_snapshot: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:139:    calculation_method_snapshot: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:144:    rate_applied: Mapped[Decimal | None] = mapped_column(
+app\models\tax_calculation.py:152:    fixed_amount_applied: Mapped[
+app\models\tax_calculation.py:154:    ] = mapped_column(
+app\models\tax_calculation.py:162:    calculation_details_json: Mapped[str | None] = mapped_column(
+app\models\tax_calculation.py:167:    status: Mapped[str] = mapped_column(
+app\models\tax_calculation.py:175:    calculated_at: Mapped[datetime] = mapped_column(
+app\models\tax_calculation.py:181:    financial_report: Mapped[
+app\models\tax_calculation.py:188:    tax_rule: Mapped[TaxRule] = relationship(
+app\models\tax_profile.py:14:    Mapped,
+app\models\tax_profile.py:15:    mapped_column,
+app\models\tax_profile.py:58:    company_id: Mapped[str] = mapped_column(
+app\models\tax_profile.py:68:    profile_code: Mapped[str] = mapped_column(
+app\models\tax_profile.py:74:    profile_name: Mapped[str] = mapped_column(
+app\models\tax_profile.py:80:    jurisdiction_country_code: Mapped[str] = mapped_column(
+app\models\tax_profile.py:88:    jurisdiction_name: Mapped[str] = mapped_column(
+app\models\tax_profile.py:95:    tax_identifier: Mapped[str | None] = mapped_column(
+app\models\tax_profile.py:101:    taxpayer_category: Mapped[str | None] = mapped_column(
+app\models\tax_profile.py:107:    description: Mapped[str | None] = mapped_column(
+app\models\tax_profile.py:112:    is_default: Mapped[bool] = mapped_column(
+app\models\tax_profile.py:120:    is_active: Mapped[bool] = mapped_column(
+app\models\tax_profile.py:128:    company: Mapped[Company] = relationship(
+app\models\tax_profile.py:133:    rules: Mapped[list[TaxRule]] = relationship(
+app\models\tax_rule.py:19:    Mapped,
+app\models\tax_rule.py:20:    mapped_column,
+app\models\tax_rule.py:44:    An effective-dated tax rate or fixed-amount rule.
+app\models\tax_rule.py:81:                "fixed_amount IS NULL "
+app\models\tax_rule.py:82:                "OR fixed_amount >= 0"
+app\models\tax_rule.py:84:            name="fixed_amount_non_negative",
+app\models\tax_rule.py:91:                "AND fixed_amount IS NULL"
+app\models\tax_rule.py:95:                "calculation_method = 'fixed_amount' "
+app\models\tax_rule.py:96:                "AND fixed_amount IS NOT NULL "
+app\models\tax_rule.py:104:    tax_profile_id: Mapped[str] = mapped_column(
+app\models\tax_rule.py:114:    rule_code: Mapped[str] = mapped_column(
+app\models\tax_rule.py:120:    rule_name: Mapped[str] = mapped_column(
+app\models\tax_rule.py:126:    tax_type: Mapped[str] = mapped_column(
+app\models\tax_rule.py:132:    calculation_method: Mapped[str] = mapped_column(
+app\models\tax_rule.py:138:    rate_percentage: Mapped[Decimal | None] = mapped_column(
+app\models\tax_rule.py:146:    fixed_amount: Mapped[Decimal | None] = mapped_column(
+app\models\tax_rule.py:154:    currency: Mapped[str] = mapped_column(
+app\models\tax_rule.py:161:    effective_from: Mapped[date] = mapped_column(
+app\models\tax_rule.py:167:    effective_to: Mapped[date | None] = mapped_column(
+app\models\tax_rule.py:173:    taxpayer_category: Mapped[str | None] = mapped_column(
+app\models\tax_rule.py:179:    business_activity: Mapped[str | None] = mapped_column(
+app\models\tax_rule.py:185:    status: Mapped[str] = mapped_column(
+app\models\tax_rule.py:193:    source_reference: Mapped[str | None] = mapped_column(
+app\models\tax_rule.py:198:    notes: Mapped[str | None] = mapped_column(
+app\models\tax_rule.py:203:    is_system_rule: Mapped[bool] = mapped_column(
+app\models\tax_rule.py:211:    display_order: Mapped[int] = mapped_column(
+app\models\tax_rule.py:218:    tax_profile: Mapped[TaxProfile] = relationship(
+app\models\tax_rule.py:223:    calculations: Mapped[
+app\repositories\company_repository.py:50:            filters.append(
+app\repositories\company_repository.py:57:            filters.append(
+app\repositories\financial_report_repository.py:69:            filters.append(
+app\repositories\financial_report_repository.py:79:            filters.append(
+app\repositories\financial_report_repository.py:88:            filters.append(
+app\repositories\financial_report_repository.py:93:            filters.append(
+app\repositories\journal_entry_repository.py:161:            filters.append(
+app\repositories\journal_entry_repository.py:185:            filters.append(
+app\repositories\journal_entry_repository.py:191:            filters.append(
+app\repositories\journal_entry_repository.py:197:            filters.append(
+app\repositories\journal_entry_repository.py:203:            filters.append(
+app\repositories\ledger_account_repository.py:106:            filters.append(
+app\repositories\ledger_account_repository.py:117:            filters.append(
+app\repositories\ledger_account_repository.py:135:            filters.append(
+app\repositories\ledger_account_repository.py:141:            filters.append(
+app\repositories\tax_configuration_repository.py:220:        # An open-ended proposed rule has no upper
+app\repositories\tax_configuration_repository.py:224:            filters.append(
+app\repositories\tax_configuration_repository.py:230:            filters.append(
+app\schemas\company.py:83:    """Store three-letter currency codes in uppercase."""
+app\schemas\company.py:85:    return value.strip().upper()
+app\schemas\financial_report.py:59:    return value.strip().upper()
+app\schemas\financial_statement.py:26:    - Current assets
+app\schemas\financial_statement.py:86:    current_assets: Decimal
+app\schemas\financial_statement.py:87:    non_current_assets: Decimal
+app\schemas\financial_statement.py:88:    total_assets: Decimal
+app\schemas\ledger_account.py:15:    ASSET = "asset"
+app\schemas\ledger_account.py:40:    CURRENT_ASSETS = "current_assets"
+app\schemas\ledger_account.py:41:    NON_CURRENT_ASSETS = "non_current_assets"
+app\schemas\ledger_account.py:78:    cleaned_value = value.strip().upper()
+app\schemas\ledger_account.py:292:    skipped_count: int
+app\schemas\notes.py:139:    skipped_count: int
+app\schemas\notes.py:259:    skipped_count: int
+app\schemas\tax_configuration.py:20:    FIXED_AMOUNT = "fixed_amount"
+app\schemas\tax_configuration.py:50:        .upper()
+app\schemas\tax_configuration.py:65:    return value.strip().upper()
+app\schemas\tax_configuration.py:71:    return value.strip().upper()
+app\schemas\tax_configuration.py:295:    fixed_amount: Decimal | None = Field(
+app\schemas\tax_configuration.py:391:            if self.fixed_amount is not None:
+app\schemas\tax_configuration.py:393:                    "Percentage rules cannot contain a fixed amount.",
+app\schemas\tax_configuration.py:398:            == TaxCalculationMethod.FIXED_AMOUNT
+app\schemas\tax_configuration.py:400:            if self.fixed_amount is None:
+app\schemas\tax_configuration.py:402:                    "Fixed-amount rules require a fixed amount.",
+app\schemas\tax_configuration.py:407:                    "Fixed-amount rules cannot contain a percentage rate.",
+app\schemas\tax_configuration.py:440:    fixed_amount: Decimal | None = Field(
+app\schemas\tax_configuration.py:536:    fixed_amount: Decimal | None
+app\schemas\tax_configuration.py:617:    fixed_amount_applied: Decimal | None
+app\schemas\tax_configuration.py:643:    fixed_amount_applied: Decimal | None
+app\services\accounting\account_templates.py:30:        AccountType.ASSET,
+app\services\accounting\account_templates.py:31:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:39:        AccountType.ASSET,
+app\services\accounting\account_templates.py:40:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:48:        AccountType.ASSET,
+app\services\accounting\account_templates.py:49:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:57:        AccountType.ASSET,
+app\services\accounting\account_templates.py:58:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:66:        AccountType.ASSET,
+app\services\accounting\account_templates.py:67:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:71:        "Contra-asset account reducing accounts receivable.",
+app\services\accounting\account_templates.py:76:        AccountType.ASSET,
+app\services\accounting\account_templates.py:77:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:85:        AccountType.ASSET,
+app\services\accounting\account_templates.py:86:        ReportCategory.NON_CURRENT_ASSETS,
+app\services\accounting\account_templates.py:94:        AccountType.ASSET,
+app\services\accounting\account_templates.py:95:        ReportCategory.NON_CURRENT_ASSETS,
+app\services\accounting\account_templates.py:102:        "Equipment",
+app\services\accounting\account_templates.py:103:        AccountType.ASSET,
+app\services\accounting\account_templates.py:104:        ReportCategory.NON_CURRENT_ASSETS,
+app\services\accounting\account_templates.py:111:        "Accumulated Depreciation",
+app\services\accounting\account_templates.py:112:        AccountType.ASSET,
+app\services\accounting\account_templates.py:113:        ReportCategory.NON_CURRENT_ASSETS,
+app\services\accounting\account_templates.py:117:        "Contra-asset account reducing property, plant and equipment.",
+app\services\accounting\account_templates.py:247:        "Depreciation Expense",
+app\services\accounting\account_templates.py:351:        AccountType.ASSET,
+app\services\accounting\account_templates.py:352:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:470:        AccountType.ASSET,
+app\services\accounting\account_templates.py:471:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:479:        AccountType.ASSET,
+app\services\accounting\account_templates.py:480:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:488:        AccountType.ASSET,
+app\services\accounting\account_templates.py:489:        ReportCategory.CURRENT_ASSETS,
+app\services\accounting\account_templates.py:608:        "Vehicle Depreciation",
+app\services\cash_flow_readiness_service.py:115:            warnings.append(
+app\services\cash_flow_readiness_service.py:132:                warnings.append(
+app\services\cash_flow_readiness_service.py:151:                != "current_assets"
+app\services\cash_flow_readiness_service.py:153:                warnings.append(
+app\services\cash_flow_readiness_service.py:156:                            "CASH_ACCOUNT_NOT_CURRENT_ASSET"
+app\services\cash_flow_readiness_service.py:165:                            "under current assets."
+app\services\cash_flow_readiness_service.py:176:                warnings.append(
+app\services\cash_flow_readiness_service.py:195:                == "non_current_assets"
+app\services\cash_flow_readiness_service.py:202:                warnings.append(
+app\services\cash_flow_readiness_service.py:205:                            "NON_CURRENT_ASSET_CLASSIFICATION"
+app\services\cash_flow_readiness_service.py:231:                warnings.append(
+app\services\cash_flow_readiness_service.py:249:            "CASH_ACCOUNT_NOT_CURRENT_ASSET",
+app\services\cash_flow_statement_service.py:140:            "asset",
+app\services\cash_flow_statement_service.py:219:            items.append(
+app\services\cash_flow_statement_service.py:299:                    "CASH_ACCOUNT_NOT_CURRENT_ASSET",
+app\services\cash_flow_statement_service.py:810:                "current_assets",
+app\services\cash_flow_statement_service.py:854:                == "current_assets"
+app\services\cash_flow_statement_service.py:990:            cash_lines.append(
+app\services\equity_statement_service.py:213:            items.append(
+app\services\equity_statement_service.py:455:            equity_account_lines.append(
+app\services\financial_statement_service.py:44:    "current_assets": "Current Assets",
+app\services\financial_statement_service.py:45:    "non_current_assets": "Non-current Assets",
+app\services\financial_statement_service.py:68:    "current_assets",
+app\services\financial_statement_service.py:69:    "non_current_assets",
+app\services\financial_statement_service.py:77:    "asset",
+app\services\financial_statement_service.py:124:        Assets and expenses normally carry debit balances.
+app\services\financial_statement_service.py:129:        - Accumulated depreciation becomes a negative asset.
+app\services\financial_statement_service.py:469:        current_assets = (
+app\services\financial_statement_service.py:472:                "current_assets",
+app\services\financial_statement_service.py:476:        non_current_assets = (
+app\services\financial_statement_service.py:479:                "non_current_assets",
+app\services\financial_statement_service.py:483:        total_assets = money(
+app\services\financial_statement_service.py:484:            current_assets
+app\services\financial_statement_service.py:485:            + non_current_assets,
+app\services\financial_statement_service.py:521:        equity_section.items.append(
+app\services\financial_statement_service.py:550:            total_assets
+app\services\financial_statement_service.py:566:            current_assets=current_assets,
+app\services\financial_statement_service.py:567:            non_current_assets=(
+app\services\financial_statement_service.py:568:                non_current_assets
+app\services\financial_statement_service.py:570:            total_assets=total_assets,
+app\services\journal_entry_service.py:896:            items.append(
+app\services\ledger_account_service.py:94:    ReportCategory.CURRENT_ASSETS: AccountType.ASSET,
+app\services\ledger_account_service.py:95:    ReportCategory.NON_CURRENT_ASSETS: AccountType.ASSET,
+app\services\ledger_account_service.py:319:        skipped_count = (
+app\services\ledger_account_service.py:328:                skipped_count,
+app\services\ledger_account_service.py:350:            skipped_count,
+app\services\notes_service.py:134:            "property-plant-equipment",
+app\services\notes_service.py:136:            "Property, Plant and Equipment",
+app\services\notes_service.py:142:            "non_current_assets",
+app\services\notes_service.py:144:            "Property, plant and equipment are carried "
+app\services\notes_service.py:145:            "at cost less accumulated depreciation and "
+app\services\notes_service.py:198:            "current_assets",
+app\services\notes_service.py:470:        skipped_count = 0
+app\services\notes_service.py:486:                skipped_count += 1
+app\services\notes_service.py:520:                skipped_count=skipped_count,
+app\services\notes_service.py:971:                    "A note cannot appear more than once in the reorder request.",
+app\services\notes_service.py:1174:        skipped_count = 0
+app\services\notes_service.py:1189:                skipped_count += 1
+app\services\notes_service.py:1255:            skipped_count=skipped_count,
+app\services\report_finalisation_service.py:248:            blockers.append(
+app\services\report_finalisation_service.py:330:            blockers.append(
+app\services\report_finalisation_service.py:344:            blockers.append(
+app\services\report_finalisation_service.py:359:            blockers.append(
+app\services\report_finalisation_service.py:373:            warnings.append(
+app\services\report_finalisation_service.py:389:            warnings.append(
+app\services\report_finalisation_service.py:409:            warnings.append(
+app\services\report_finalisation_service.py:431:            warnings.append(
+app\services\report_finalisation_service.py:449:            warnings.append(
+app\services\report_finalisation_service.py:469:            warnings.append(
+app\services\report_finalisation_service.py:887:                    "fixed_amount_applied": (
+app\services\report_finalisation_service.py:890:                            .fixed_amount_applied,
+app\services\report_finalisation_service.py:894:                            .fixed_amount_applied
+app\services\report_finalisation_service.py:1464:            fixed_amount_applied=(
+app\services\report_finalisation_service.py:1466:                .fixed_amount_applied
+app\services\report_finalisation_service.py:1650:                copied_entry_pairs.append(
+app\services\tax_configuration_service.py:280:        fixed_amount: Decimal | None,
+app\services\tax_configuration_service.py:304:            if fixed_amount is not None:
+app\services\tax_configuration_service.py:306:                    "Percentage rules cannot contain a fixed amount.",
+app\services\tax_configuration_service.py:321:            .FIXED_AMOUNT
+app\services\tax_configuration_service.py:324:            if fixed_amount is None:
+app\services\tax_configuration_service.py:326:                    "Fixed-amount rules require a fixed amount.",
+app\services\tax_configuration_service.py:329:            if fixed_amount < Decimal("0"):
+app\services\tax_configuration_service.py:331:                    "Fixed amounts cannot be negative.",
+app\services\tax_configuration_service.py:336:                    "Fixed-amount rules cannot contain a percentage rate.",
+app\services\tax_configuration_service.py:652:            fixed_amount=(
+app\services\tax_configuration_service.py:653:                payload.fixed_amount
+app\services\tax_configuration_service.py:688:            fixed_amount=(
+app\services\tax_configuration_service.py:689:                payload.fixed_amount
+app\services\tax_configuration_service.py:848:        proposed_fixed_amount = (
+app\services\tax_configuration_service.py:850:                "fixed_amount",
+app\services\tax_configuration_service.py:851:                rule.fixed_amount,
+app\services\tax_configuration_service.py:883:            fixed_amount=(
+app\services\tax_configuration_service.py:884:                proposed_fixed_amount
+app\services\tax_configuration_service.py:1169:        fixed_amount_applied: Decimal | None = None
+app\services\tax_configuration_service.py:1198:            .FIXED_AMOUNT
+app\services\tax_configuration_service.py:1201:            if rule.fixed_amount is None:
+app\services\tax_configuration_service.py:1203:                    "The effective fixed rule has no amount.",
+app\services\tax_configuration_service.py:1212:                        "The fixed-amount rule currency "
+app\services\tax_configuration_service.py:1217:            fixed_amount_applied = Decimal(
+app\services\tax_configuration_service.py:1218:                rule.fixed_amount,
+app\services\tax_configuration_service.py:1222:                fixed_amount_applied
+app\services\tax_configuration_service.py:1273:                fixed_amount_applied=(
+app\services\tax_configuration_service.py:1274:                    fixed_amount_applied
+app\services\tax_configuration_service.py:1362:            fixed_amount_applied=(
+app\services\tax_configuration_service.py:1364:                .fixed_amount_applied
