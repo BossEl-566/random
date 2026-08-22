@@ -2,6 +2,11 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  PDFDocument,
+  StandardFonts,
+} from "pdf-lib";
+
+import {
   app,
   BrowserWindow,
   dialog,
