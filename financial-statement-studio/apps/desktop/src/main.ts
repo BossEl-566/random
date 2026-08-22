@@ -93,6 +93,31 @@ function isAllowedStatementUrl(
   }
 }
 
+function isCompleteReportUrl(
+  value: string,
+): boolean {
+  try {
+    const senderUrl =
+      new URL(value);
+
+    const frontendUrl =
+      new URL(FRONTEND_URL);
+
+    if (
+      senderUrl.origin !==
+      frontendUrl.origin
+    ) {
+      return false;
+    }
+
+    return /^\/reports\/[^/]+\/complete-report\/?$/.test(
+      senderUrl.pathname,
+    );
+  } catch {
+    return false;
+  }
+}
+
 function requireAllowedStatementSender(
   event: IpcMainInvokeEvent,
 ): void {
@@ -180,6 +205,92 @@ function ensurePdfExtension(
     .endsWith(".pdf")
     ? filePath
     : `${filePath}.pdf`;
+}
+
+async function addCompleteReportPageNumbers(
+  pdfData: Uint8Array,
+): Promise<Uint8Array> {
+  const pdfDocument =
+    await PDFDocument.load(
+      pdfData,
+    );
+
+  const pages =
+    pdfDocument.getPages();
+
+  /*
+   * The first physical PDF page is
+   * the financial statements cover.
+   * It deliberately has no visible
+   * page number.
+   */
+  if (pages.length <= 1) {
+    return pdfData;
+  }
+
+  const font =
+    await pdfDocument.embedFont(
+      StandardFonts.Helvetica,
+    );
+
+  const fontSize = 8;
+
+  const totalNumberedPages =
+    pages.length - 1;
+
+  for (
+    let physicalPageIndex = 1;
+    physicalPageIndex <
+    pages.length;
+    physicalPageIndex += 1
+  ) {
+    const page =
+      pages[
+        physicalPageIndex
+      ];
+
+    /*
+     * Physical page index 1 is the
+     * second PDF page, but becomes
+     * financial-statement page 1
+     * because the cover is excluded.
+     */
+    const statementPageNumber =
+      physicalPageIndex;
+
+    const label =
+      `Page ${statementPageNumber} of ${totalNumberedPages}`;
+
+    const textWidth =
+      font.widthOfTextAtSize(
+        label,
+        fontSize,
+      );
+
+    const {
+      width,
+    } = page.getSize();
+
+    page.drawText(
+      label,
+      {
+        x:
+          (width -
+            textWidth) /
+          2,
+
+        y: 18,
+
+        size: fontSize,
+
+        font,
+
+        opacity: 0.7,
+      },
+    );
+  }
+
+  return pdfDocument.save();
 }
 
 async function showPdfSaveDialog(
