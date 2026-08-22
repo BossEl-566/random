@@ -471,7 +471,10 @@ function registerDesktopIpcHandlers(): void {
             saveResult.filePath,
           );
 
-        const pdfData =
+        const senderUrl =
+          event.sender.getURL();
+
+        const generatedPdfData =
           await event.sender.printToPDF({
             landscape: false,
             displayHeaderFooter: false,
@@ -481,9 +484,18 @@ function registerDesktopIpcHandlers(): void {
             scale: 1,
           });
 
+        const finalPdfData =
+          isCompleteReportUrl(
+            senderUrl,
+          )
+            ? await addCompleteReportPageNumbers(
+                generatedPdfData,
+              )
+            : generatedPdfData;
+
         await writeFile(
           outputPath,
-          pdfData,
+          finalPdfData,
         );
 
         return {
