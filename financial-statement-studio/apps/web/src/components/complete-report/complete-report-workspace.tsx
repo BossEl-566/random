@@ -185,6 +185,59 @@ function getFirmDisplayName(
   );
 }
 
+const COMPLETE_REPORT_CONTENTS = [
+  {
+    number: "01",
+    key: "business-information",
+    title: "Business Information",
+  },
+  {
+    number: "02",
+    key: "professional-advisers",
+    title: "Professional Advisers",
+  },
+  {
+    number: "03",
+    key: "accountant-report",
+    title: "Accountant Report",
+  },
+  {
+    number: "04",
+    key: "profit-or-loss",
+    title: "Statement of Profit or Loss",
+  },
+  {
+    number: "05",
+    key: "financial-position",
+    title: "Statement of Financial Position",
+  },
+  {
+    number: "06",
+    key: "changes-in-equity",
+    title: "Statement of Changes in Equity",
+  },
+  {
+    number: "07",
+    key: "cash-flows",
+    title: "Statement of Cash Flows",
+  },
+  {
+    number: "08",
+    key: "notes",
+    title: "Notes to the Financial Statements",
+  },
+  {
+    number: "09",
+    key: "supporting-schedules",
+    title: "Supporting Schedules",
+  },
+  {
+    number: "10",
+    key: "tax-computation",
+    title: "Tax Computation and Reconciliation",
+  },
+] as const;
+
 export function CompleteReportWorkspace({
   reportId,
 }: CompleteReportWorkspaceProps) {
@@ -807,7 +860,11 @@ export function CompleteReportWorkspace({
           </article>
 
           {/* CONTENTS PAGE */}
-          <article className="complete-report-sheet">
+          <article
+  className="complete-report-sheet"
+  id="complete-report-business-information"
+  data-complete-report-section="business-information"
+>
             <header className="complete-report-section-header">
               <span>
                 Financial Statements
@@ -819,90 +876,41 @@ export function CompleteReportWorkspace({
             </header>
 
             <div className="complete-report-contents">
-              <div>
-                <span>01</span>
-                <strong>
-                  Business Information
-                </strong>
-              </div>
+  {COMPLETE_REPORT_CONTENTS.map(
+    (item) => (
+      <a
+        className="complete-report-contents__item"
+        href={`#complete-report-${item.key}`}
+        key={item.key}
+      >
+        <span className="complete-report-contents__number">
+          {item.number}
+        </span>
 
-              <div>
-                <span>02</span>
-                <strong>
-                  Professional Advisers
-                </strong>
-              </div>
+        <strong>
+          {item.title}
+        </strong>
 
-              <div>
-                <span>03</span>
-                <strong>
-                  Accountant Report
-                </strong>
-              </div>
+        <span
+          className="complete-report-contents__page"
+          data-toc-key={item.key}
+          aria-label="PDF page number"
+        >
+          —
+        </span>
+      </a>
+    ),
+  )}
+</div>
 
-              <div>
-                <span>04</span>
-                <strong>
-                  Statement of Profit or Loss
-                </strong>
-              </div>
-
-              <div>
-                <span>05</span>
-                <strong>
-                  Statement of Financial
-                  Position
-                </strong>
-              </div>
-
-              <div>
-                <span>06</span>
-                <strong>
-                  Statement of Changes in
-                  Equity
-                </strong>
-              </div>
-
-              <div>
-                <span>07</span>
-                <strong>
-                  Statement of Cash Flows
-                </strong>
-              </div>
-
-              <div>
-                <span>08</span>
-                <strong>
-                  Notes and Disclosures
-                </strong>
-              </div>
-
-              <div>
-                <span>09</span>
-                <strong>
-                  Supporting Schedules
-                </strong>
-              </div>
-
-              <div>
-                <span>10</span>
-                <strong>
-                  Tax Computation and
-                  Reconciliation
-                </strong>
-              </div>
-            </div>
-
-            <p className="complete-report-development-note complete-report-screen-only">
-              Statement pages will be
-              connected into this package
-              during the next assembly
-              checkpoints.
-            </p>
           </article>
 
           {/* BUSINESS INFORMATION */}
-          <article className="complete-report-sheet">
+          <article
+  className="complete-report-sheet"
+  id="complete-report-business-information"
+  data-complete-report-section="business-information"
+>
             <header className="complete-report-section-header">
               <span>
                 Section 01
@@ -1036,7 +1044,11 @@ export function CompleteReportWorkspace({
           </article>
 
           {/* PROFESSIONAL ADVISERS */}
-          <article className="complete-report-sheet">
+          <article
+  className="complete-report-sheet"
+  id="complete-report-professional-advisers"
+  data-complete-report-section="professional-advisers"
+>
             <header className="complete-report-section-header">
               <span>
                 Section 02
@@ -1101,7 +1113,11 @@ export function CompleteReportWorkspace({
           </article>
 
           {/* ACCOUNTANT REPORT */}
-          <article className="complete-report-sheet">
+          <article
+  className="complete-report-sheet"
+  id="complete-report-accountant-report"
+  data-complete-report-section="accountant-report"
+>
             <header className="complete-report-section-header">
               <span>
                 Section 03
@@ -1172,7 +1188,11 @@ export function CompleteReportWorkspace({
           </article>
                     {/* STATEMENT OF PROFIT OR LOSS */}
           {profitOrLoss ? (
-            <article className="complete-report-sheet complete-report-statement-sheet">
+            <article
+  className="complete-report-sheet complete-report-statement-sheet"
+  id="complete-report-profit-or-loss"
+  data-complete-report-section="profit-or-loss"
+>
               <header className="complete-report-section-header complete-report-statement-header">
                 <span>
                   Section 04
@@ -1442,7 +1462,11 @@ export function CompleteReportWorkspace({
           ) : null}
                     {/* STATEMENT OF FINANCIAL POSITION */}
           {financialPosition ? (
-            <article className="complete-report-sheet complete-report-statement-sheet">
+            <article
+  className="complete-report-sheet complete-report-statement-sheet"
+  id="complete-report-financial-position"
+  data-complete-report-section="financial-position"
+>
               <header className="complete-report-section-header complete-report-statement-header">
                 <span>
                   Section 05
@@ -1714,7 +1738,11 @@ export function CompleteReportWorkspace({
           ) : null}
                     {/* STATEMENT OF CHANGES IN EQUITY */}
           {changesInEquity ? (
-            <article className="complete-report-sheet complete-report-statement-sheet">
+            <article
+  className="complete-report-sheet complete-report-statement-sheet"
+  id="complete-report-changes-in-equity"
+  data-complete-report-section="changes-in-equity"
+>
               <header className="complete-report-section-header complete-report-statement-header">
                 <span>
                   Section 06
@@ -2003,7 +2031,11 @@ export function CompleteReportWorkspace({
           ) : null}
                     {/* STATEMENT OF CASH FLOWS */}
           {cashFlowReadiness ? (
-            <article className="complete-report-sheet complete-report-statement-sheet">
+            <article
+  className="complete-report-sheet complete-report-statement-sheet"
+  id="complete-report-cash-flows"
+  data-complete-report-section="cash-flows"
+>
               <header className="complete-report-section-header complete-report-statement-header">
                 <span>
                   Section 07
@@ -2432,7 +2464,11 @@ export function CompleteReportWorkspace({
             </article>
           ) : null}
                     {/* NOTES AND DISCLOSURES */}
-          <article className="complete-report-sheet complete-report-notes-sheet">
+          <article
+  className="complete-report-sheet complete-report-notes-sheet"
+  id="complete-report-notes"
+  data-complete-report-section="notes"
+>
             <header className="complete-report-section-header complete-report-statement-header">
               <span>
                 Section 08
@@ -2593,7 +2629,11 @@ export function CompleteReportWorkspace({
             </footer>
           </article>
                     {/* SUPPORTING SCHEDULES */}
-          <article className="complete-report-sheet complete-report-schedules-sheet">
+          <article
+  className="complete-report-sheet complete-report-schedules-sheet"
+  id="complete-report-supporting-schedules"
+  data-complete-report-section="supporting-schedules"
+>
             <header className="complete-report-section-header complete-report-statement-header">
               <span>
                 Section 09
@@ -2780,7 +2820,11 @@ export function CompleteReportWorkspace({
             </footer>
           </article>
                     {/* TAX COMPUTATION AND RECONCILIATION */}
-          <article className="complete-report-sheet complete-report-tax-sheet">
+          <article
+  className="complete-report-sheet complete-report-tax-sheet"
+  id="complete-report-tax-computation"
+  data-complete-report-section="tax-computation"
+>
             <header className="complete-report-section-header complete-report-statement-header">
               <span>
                 Section 10

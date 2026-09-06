@@ -4541,6 +4541,14 @@ button:disabled {
   .financial-statement-section > footer {
     break-inside: avoid;
   }
+    .complete-report-contents__item {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .complete-report-contents__page {
+    color: #344054;
+  }
 }
 
 .statement-print-actions {
@@ -7436,15 +7444,25 @@ button:disabled {
   display: grid;
 }
 
-.complete-report-contents > div {
+.complete-report-contents__item {
   display: grid;
-  grid-template-columns: 52px 1fr;
+  grid-template-columns:
+    52px
+    minmax(0, 1fr)
+    52px;
+  align-items: start;
   gap: 16px;
   padding: 17px 0;
   border-bottom: 1px solid #e4e7ec;
+  color: inherit;
+  text-decoration: none;
 }
 
-.complete-report-contents span {
+.complete-report-contents__item:hover strong {
+  color: #101828;
+}
+
+.complete-report-contents__number {
   color: #98a2b3;
   font-size: 0.72rem;
   font-weight: 800;
@@ -7453,6 +7471,14 @@ button:disabled {
 .complete-report-contents strong {
   color: #344054;
   font-size: 0.9rem;
+}
+
+.complete-report-contents__page {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .complete-report-information-grid {
