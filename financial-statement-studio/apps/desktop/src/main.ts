@@ -2,8 +2,16 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  PDFArray,
+  PDFDict,
   PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFNumber,
+  PDFRef,
+  PDFString,
   StandardFonts,
+  rgb,
 } from "pdf-lib";
 
 import {
@@ -207,6 +215,511 @@ function ensurePdfExtension(
     : `${filePath}.pdf`;
 }
 
+function dereferencePdfObject(
+  pdfDocument: PDFDocument,
+  value: unknown,
+): unknown {
+  if (value instanceof PDFRef) {
+    return pdfDocument.context.lookup(
+      value,
+    );
+  }
+
+  return value;
+}
+
+function decodePdfDestinationName(
+  value: unknown,
+): string | null {
+  if (
+    value instanceof PDFString ||
+    value instanceof PDFHexString
+  ) {
+    return value.decodeText();
+  }
+
+  if (value instanceof PDFName) {
+    return value
+      .toString()
+      .replace(/^\/+/, "");
+  }
+
+  return null;
+}
+
+function findNamedDestinationInTree(
+  pdfDocument: PDFDocument,
+  node: PDFDict,
+  targetName: string,
+): PDFArray | null {
+  const names =
+    node.lookupMaybe(
+      PDFName.of("Names"),
+      PDFArray,
+    );
+
+  if (names) {
+    for (
+      let index = 0;
+      index + 1 < names.size();
+      index += 2
+    ) {
+      const key =
+        dereferencePdfObject(
+          pdfDocument,
+          names.get(index),
+        );
+
+      const keyName =
+        decodePdfDestinationName(
+          key,
+        );
+
+      if (
+        keyName !== targetName
+      ) {
+        continue;
+      }
+
+      return resolveDestinationArray(
+        pdfDocument,
+        names.get(index + 1),
+      );
+    }
+  }
+
+  const kids =
+    node.lookupMaybe(
+      PDFName.of("Kids"),
+      PDFArray,
+    );
+
+  if (!kids) {
+    return null;
+  }
+
+  for (
+    let index = 0;
+    index < kids.size();
+    index += 1
+  ) {
+    const child =
+      kids.lookup(
+        index,
+        PDFDict,
+      );
+
+    const result =
+      findNamedDestinationInTree(
+        pdfDocument,
+        child,
+        targetName,
+      );
+
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function findNamedDestination(
+  pdfDocument: PDFDocument,
+  targetName: string,
+): PDFArray | null {
+  const namesDictionary =
+    pdfDocument.catalog.lookupMaybe(
+      PDFName.of("Names"),
+      PDFDict,
+    );
+
+  const destinationsTree =
+    namesDictionary?.lookupMaybe(
+      PDFName.of("Dests"),
+      PDFDict,
+    );
+
+  if (destinationsTree) {
+    const result =
+      findNamedDestinationInTree(
+        pdfDocument,
+        destinationsTree,
+        targetName,
+      );
+
+    if (result) {
+      return result;
+    }
+  }
+
+  /*
+   * Some PDFs use the older catalog
+   * /Dests dictionary instead of a
+   * name tree.
+   */
+  const legacyDestinations =
+    pdfDocument.catalog.lookupMaybe(
+      PDFName.of("Dests"),
+      PDFDict,
+    );
+
+  if (!legacyDestinations) {
+    return null;
+  }
+
+  const legacyValue =
+    legacyDestinations.get(
+      PDFName.of(
+        targetName,
+      ),
+    );
+
+  if (!legacyValue) {
+    return null;
+  }
+
+  return resolveDestinationArray(
+    pdfDocument,
+    legacyValue,
+  );
+}
+
+function resolveDestinationArray(
+  pdfDocument: PDFDocument,
+  value: unknown,
+): PDFArray | null {
+  const resolved =
+    dereferencePdfObject(
+      pdfDocument,
+      value,
+    );
+
+  if (
+    resolved instanceof
+    PDFArray
+  ) {
+    return resolved;
+  }
+
+  if (
+    resolved instanceof
+    PDFDict
+  ) {
+    return (
+      resolved.lookupMaybe(
+        PDFName.of("D"),
+        PDFArray,
+      ) ?? null
+    );
+  }
+
+  const destinationName =
+    decodePdfDestinationName(
+      resolved,
+    );
+
+  if (!destinationName) {
+    return null;
+  }
+
+  return findNamedDestination(
+    pdfDocument,
+    destinationName,
+  );
+}
+
+function getAnnotationDestination(
+  pdfDocument: PDFDocument,
+  annotation: PDFDict,
+): PDFArray | null {
+  const subtype =
+    annotation.lookupMaybe(
+      PDFName.of("Subtype"),
+      PDFName,
+    );
+
+  if (
+    subtype?.toString() !==
+    "/Link"
+  ) {
+    return null;
+  }
+
+  const directDestination =
+    annotation.get(
+      PDFName.of("Dest"),
+    );
+
+  if (directDestination) {
+    const resolved =
+      resolveDestinationArray(
+        pdfDocument,
+        directDestination,
+      );
+
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  const action =
+    annotation.lookupMaybe(
+      PDFName.of("A"),
+      PDFDict,
+    );
+
+  if (!action) {
+    return null;
+  }
+
+  const actionType =
+    action.lookupMaybe(
+      PDFName.of("S"),
+      PDFName,
+    );
+
+  if (
+    actionType &&
+    actionType.toString() !==
+      "/GoTo"
+  ) {
+    return null;
+  }
+
+  const actionDestination =
+    action.get(
+      PDFName.of("D"),
+    );
+
+  if (!actionDestination) {
+    return null;
+  }
+
+  return resolveDestinationArray(
+    pdfDocument,
+    actionDestination,
+  );
+}
+
+function getDestinationPageIndex(
+  pdfDocument: PDFDocument,
+  destination: PDFArray,
+): number | null {
+  if (
+    destination.size() === 0
+  ) {
+    return null;
+  }
+
+  const destinationPage =
+    destination.get(0);
+
+  const pages =
+    pdfDocument.getPages();
+
+  if (
+    destinationPage instanceof
+    PDFRef
+  ) {
+    const destinationRef =
+      destinationPage.toString();
+
+    const pageIndex =
+      pages.findIndex(
+        (page) =>
+          page.ref.toString() ===
+          destinationRef,
+      );
+
+    return pageIndex >= 0
+      ? pageIndex
+      : null;
+  }
+
+  const resolvedPage =
+    dereferencePdfObject(
+      pdfDocument,
+      destinationPage,
+    );
+
+  const pageIndex =
+    pages.findIndex(
+      (page) =>
+        page.node ===
+        resolvedPage,
+    );
+
+  return pageIndex >= 0
+    ? pageIndex
+    : null;
+}
+
+type CompleteReportTocLink = {
+  destinationPageIndex: number;
+
+  left: number;
+  right: number;
+  bottom: number;
+  top: number;
+};
+
+function getCompleteReportTocLinks(
+  pdfDocument: PDFDocument,
+): CompleteReportTocLink[] {
+  const pages =
+    pdfDocument.getPages();
+
+  /*
+   * Page index 0 = cover.
+   * Page index 1 = table of contents.
+   */
+  if (pages.length < 2) {
+    return [];
+  }
+
+  const contentsPage =
+    pages[1];
+
+  const annotations =
+    contentsPage.node.lookupMaybe(
+      PDFName.of("Annots"),
+      PDFArray,
+    );
+
+  if (!annotations) {
+    return [];
+  }
+
+  const links:
+    CompleteReportTocLink[] =
+      [];
+
+  for (
+    let index = 0;
+    index <
+    annotations.size();
+    index += 1
+  ) {
+    const annotation =
+      annotations.lookup(
+        index,
+        PDFDict,
+      );
+
+    const destination =
+      getAnnotationDestination(
+        pdfDocument,
+        annotation,
+      );
+
+    if (!destination) {
+      continue;
+    }
+
+    const destinationPageIndex =
+      getDestinationPageIndex(
+        pdfDocument,
+        destination,
+      );
+
+    /*
+     * TOC entries should point beyond
+     * the contents page itself.
+     */
+    if (
+      destinationPageIndex ===
+        null ||
+      destinationPageIndex <= 1
+    ) {
+      continue;
+    }
+
+    const rectangle =
+      annotation.lookupMaybe(
+        PDFName.of("Rect"),
+        PDFArray,
+      );
+
+    if (
+      !rectangle ||
+      rectangle.size() < 4
+    ) {
+      continue;
+    }
+
+    const x1 =
+      rectangle
+        .lookup(
+          0,
+          PDFNumber,
+        )
+        .asNumber();
+
+    const y1 =
+      rectangle
+        .lookup(
+          1,
+          PDFNumber,
+        )
+        .asNumber();
+
+    const x2 =
+      rectangle
+        .lookup(
+          2,
+          PDFNumber,
+        )
+        .asNumber();
+
+    const y2 =
+      rectangle
+        .lookup(
+          3,
+          PDFNumber,
+        )
+        .asNumber();
+
+    links.push({
+      destinationPageIndex,
+
+      left: Math.min(
+        x1,
+        x2,
+      ),
+
+      right: Math.max(
+        x1,
+        x2,
+      ),
+
+      bottom: Math.min(
+        y1,
+        y2,
+      ),
+
+      top: Math.max(
+        y1,
+        y2,
+      ),
+    });
+  }
+
+  /*
+   * PDF coordinates run from the
+   * bottom upward, therefore higher
+   * TOC rows have larger Y values.
+   */
+  return links.sort(
+    (
+      firstLink,
+      secondLink,
+    ) =>
+      secondLink.top -
+      firstLink.top,
+  );
+}
+
 async function addCompleteReportPageNumbers(
   pdfData: Uint8Array,
 ): Promise<Uint8Array> {
@@ -219,10 +732,7 @@ async function addCompleteReportPageNumbers(
     pdfDocument.getPages();
 
   /*
-   * The first physical PDF page is
-   * the financial statements cover.
-   * It deliberately has no visible
-   * page number.
+   * The cover remains unnumbered.
    */
   if (pages.length <= 1) {
     return pdfData;
@@ -233,11 +743,132 @@ async function addCompleteReportPageNumbers(
       StandardFonts.Helvetica,
     );
 
-  const fontSize = 8;
+  const footerFontSize = 8;
 
   const totalNumberedPages =
     pages.length - 1;
 
+  /*
+   * ---------------------------------
+   * Automatic Table of Contents pages
+   * ---------------------------------
+   *
+   * Chromium created internal PDF
+   * destinations from the HTML links.
+   *
+   * Each destination therefore tells
+   * us the REAL physical page where
+   * that report section starts.
+   */
+  const tocLinks =
+    getCompleteReportTocLinks(
+      pdfDocument,
+    );
+
+  const contentsPage =
+    pages[1];
+
+  for (
+    const link of tocLinks
+  ) {
+    /*
+     * Cover is physical index 0 and
+     * excluded from visible numbering.
+     *
+     * Therefore:
+     *
+     * physical index 1 = page 1
+     * physical index 2 = page 2
+     * etc.
+     */
+    const statementPageNumber =
+      link.destinationPageIndex;
+
+    const label =
+      String(
+        statementPageNumber,
+      );
+
+    const fontSize = 9;
+
+    const textWidth =
+      font.widthOfTextAtSize(
+        label,
+        fontSize,
+      );
+
+    const rowHeight =
+      Math.max(
+        12,
+        link.top -
+          link.bottom,
+      );
+
+    /*
+     * Cover the HTML placeholder
+     * dash in the right-hand TOC
+     * column before writing the
+     * real number.
+     */
+    const replacementWidth = 42;
+
+    contentsPage.drawRectangle({
+      x:
+        link.right -
+        replacementWidth,
+
+      y:
+        link.bottom + 1,
+
+      width:
+        replacementWidth,
+
+      height:
+        Math.max(
+          1,
+          rowHeight - 2,
+        ),
+
+      color: rgb(
+        1,
+        1,
+        1,
+      ),
+    });
+
+    contentsPage.drawText(
+      label,
+      {
+        x:
+          link.right -
+          textWidth -
+          2,
+
+        y:
+          link.bottom +
+          (rowHeight -
+            fontSize) /
+            2 +
+          1,
+
+        size: fontSize,
+
+        font,
+
+        color: rgb(
+          0.2,
+          0.25,
+          0.33,
+        ),
+      },
+    );
+  }
+
+  /*
+   * ---------------------------------
+   * Footer page numbering
+   * ---------------------------------
+   */
   for (
     let physicalPageIndex = 1;
     physicalPageIndex <
@@ -249,12 +880,6 @@ async function addCompleteReportPageNumbers(
         physicalPageIndex
       ];
 
-    /*
-     * Physical page index 1 is the
-     * second PDF page, but becomes
-     * financial-statement page 1
-     * because the cover is excluded.
-     */
     const statementPageNumber =
       physicalPageIndex;
 
@@ -264,7 +889,7 @@ async function addCompleteReportPageNumbers(
     const textWidth =
       font.widthOfTextAtSize(
         label,
-        fontSize,
+        footerFontSize,
       );
 
     const {
@@ -281,12 +906,25 @@ async function addCompleteReportPageNumbers(
 
         y: 18,
 
-        size: fontSize,
+        size:
+          footerFontSize,
 
         font,
 
-        opacity: 0.7,
+        color: rgb(
+          0.4,
+          0.43,
+          0.48,
+        ),
       },
+    );
+  }
+
+  if (
+    tocLinks.length !== 10
+  ) {
+    console.warn(
+      `[Electron] Expected 10 complete-report TOC links, but found ${tocLinks.length}.`,
     );
   }
 

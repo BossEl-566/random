@@ -12,6 +12,10 @@ type EquityAccountTableProps = {
 export function EquityAccountTable({
   statement,
 }: EquityAccountTableProps) {
+  const hasEquityAccounts =
+    statement.equity_accounts.length >
+    0;
+
   return (
     <section className="equity-account-breakdown">
       <header>
@@ -30,40 +34,102 @@ export function EquityAccountTable({
         </strong>
       </header>
 
-      <div className="equity-account-table-wrapper">
-        <table className="equity-account-table">
-          <thead>
-            <tr>
-              <th scope="col">
-                Equity account
-              </th>
+      {!hasEquityAccounts ? (
+        <div className="equity-account-empty-summary">
+          <div>
+            <span>
+              Equity-account activity
+            </span>
 
-              <th scope="col">
-                Opening
-              </th>
+            <strong>
+              No posted equity-account
+              movements were found.
+            </strong>
 
-              <th scope="col">
-                Increases
-              </th>
+            <p>
+              There are no direct
+              contributions, drawings,
+              distributions or other posted
+              movements against individual
+              equity accounts for this
+              reporting period.
+            </p>
+          </div>
 
-              <th scope="col">
-                Decreases
-              </th>
+          <div className="equity-account-empty-summary__figures">
+            <div>
+              <span>
+                Opening recorded equity
+              </span>
 
-              <th scope="col">
-                Net movement
-              </th>
+              <strong>
+                {statement.currency}
+                {" "}
+                {formatStatementMoney(
+                  statement
+                    .opening_recorded_equity,
+                )}
+              </strong>
+            </div>
 
-              <th scope="col">
-                Recorded closing
-              </th>
-            </tr>
-          </thead>
+            <div>
+              <span>
+                Recorded closing equity
+              </span>
 
-          <tbody>
-            {statement.equity_accounts.length >
-            0 ? (
-              statement.equity_accounts.map(
+              <strong>
+                {statement.currency}
+                {" "}
+                {formatStatementMoney(
+                  statement
+                    .recorded_closing_equity,
+                )}
+              </strong>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="equity-account-table-wrapper">
+          <table className="equity-account-table">
+            <colgroup>
+              <col className="equity-account-table__account-column" />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+            </colgroup>
+
+            <thead>
+              <tr>
+                <th scope="col">
+                  Equity account
+                </th>
+
+                <th scope="col">
+                  Opening
+                </th>
+
+                <th scope="col">
+                  Increases
+                </th>
+
+                <th scope="col">
+                  Decreases
+                </th>
+
+                <th scope="col">
+                  Net movement
+                </th>
+
+                <th scope="col">
+                  Recorded closing
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {statement.equity_accounts.map(
                 (account) => (
                   <tr
                     key={
@@ -113,66 +179,56 @@ export function EquityAccountTable({
                     </td>
                   </tr>
                 ),
-              )
-            ) : (
+              )}
+            </tbody>
+
+            <tfoot>
               <tr>
-                <td
-                  className="equity-account-table__empty"
-                  colSpan={6}
-                >
-                  No posted equity-account
-                  movements were found.
+                <th scope="row">
+                  Totals
+                </th>
+
+                <td>
+                  {formatStatementMoney(
+                    statement
+                      .opening_recorded_equity,
+                  )}
+                </td>
+
+                <td>
+                  {formatStatementMoney(
+                    statement
+                      .direct_increases
+                      .total,
+                  )}
+                </td>
+
+                <td>
+                  {formatStatementMoney(
+                    statement
+                      .direct_decreases
+                      .total,
+                  )}
+                </td>
+
+                <td>
+                  {formatStatementMoney(
+                    statement
+                      .net_direct_equity_movement,
+                  )}
+                </td>
+
+                <td>
+                  {formatStatementMoney(
+                    statement
+                      .recorded_closing_equity,
+                  )}
                 </td>
               </tr>
-            )}
-          </tbody>
-
-          <tfoot>
-            <tr>
-              <th scope="row">
-                Totals
-              </th>
-
-              <td>
-                {formatStatementMoney(
-                  statement
-                    .opening_recorded_equity,
-                )}
-              </td>
-
-              <td>
-                {formatStatementMoney(
-                  statement
-                    .direct_increases
-                    .total,
-                )}
-              </td>
-
-              <td>
-                {formatStatementMoney(
-                  statement
-                    .direct_decreases
-                    .total,
-                )}
-              </td>
-
-              <td>
-                {formatStatementMoney(
-                  statement
-                    .net_direct_equity_movement,
-                )}
-              </td>
-
-              <td>
-                {formatStatementMoney(
-                  statement
-                    .recorded_closing_equity,
-                )}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
