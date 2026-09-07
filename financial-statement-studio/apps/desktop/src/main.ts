@@ -502,6 +502,7 @@ function getAnnotationDestination(
   );
 }
 
+
 function getDestinationPageIndex(
   pdfDocument: PDFDocument,
   destination: PDFArray,
