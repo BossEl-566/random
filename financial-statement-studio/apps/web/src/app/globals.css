@@ -8367,5 +8367,138 @@ button:disabled {
     font-size: 0.74rem;
     line-height: 1.45;
   }
+
+  /* =========================================================
+   Complete Report — Cash Flow Print Pagination
+   ========================================================= */
+
+@media print {
+  #complete-report-cash-flows {
+    padding-top: 13mm;
+    padding-bottom: 13mm;
+  }
+
+  #complete-report-cash-flows
+    .complete-report-statement-header {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  #complete-report-cash-flows
+    .complete-report-statement-meta {
+    margin-bottom: 12px;
+    padding: 7px 9px;
+  }
+
+  /*
+   * Keep activity headings with the
+   * section immediately following them.
+   */
+  #complete-report-cash-flows
+    .financial-position-column-heading {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-starting-line {
+    margin-bottom: 14px;
+    padding: 9px 10px;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-section {
+    margin-bottom: 14px;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-section
+    .financial-statement-line {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-section
+    footer {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  #complete-report-cash-flows
+    .financial-statement-subtotal {
+    margin-top: 9px;
+    margin-bottom: 11px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  #complete-report-cash-flows
+    .financial-statement-final-total {
+    margin-top: 12px;
+    margin-bottom: 14px;
+    padding: 11px 14px;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-reconciliation {
+    margin-top: 16px;
+    margin-bottom: 14px;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-reconciliation
+    > header {
+    padding: 10px 14px;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-reconciliation__lines {
+    padding: 5px 14px 10px;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-reconciliation__lines
+    > div {
+    gap: 18px;
+    padding: 7px 0;
+    font-size: 0.74rem;
+  }
+
+  #complete-report-cash-flows
+    .cash-flow-reconciliation__lines
+    strong {
+    min-width: 150px;
+  }
+
+  #complete-report-cash-flows
+    .financial-position-validation {
+    padding-top: 12px;
+    padding-bottom: 12px;
+
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  #complete-report-cash-flows
+    .complete-report-statement-footer {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+}
 }
 }
