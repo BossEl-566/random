@@ -8466,6 +8466,7 @@ button:disabled {
     padding: 10px 14px;
   }
 
+  
   #complete-report-cash-flows
     .cash-flow-reconciliation__lines {
     padding: 5px 14px 10px;
@@ -8499,7 +8500,7 @@ button:disabled {
     margin-top: 12px;
     padding-top: 10px;
   }
-  
+
 }
 }
 }
