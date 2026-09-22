@@ -1,0 +1,213 @@
+===== CONFIG.PY =====
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+API_DIRECTORY = Path(__file__).resolve().parents[2]
+DEFAULT_DATA_DIRECTORY = API_DIRECTORY / "data"
+DEFAULT_DATABASE_PATH = DEFAULT_DATA_DIRECTORY / "accounting.db"
+
+
+class Settings(BaseSettings):
+    """Application configuration loaded from environment variables."""
+
+    app_name: str = "Financial Statement Studio API"
+    environment: str = "development"
+    api_prefix: str = "/api"
+    frontend_origin: str = "http://localhost:3000"
+
+    data_dir: Path = DEFAULT_DATA_DIRECTORY
+    database_url: str = (
+        f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=str(API_DIRECTORY / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
+===== DATABASE.PY =====
+from collections.abc import Generator
+
+from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+from app.core.config import settings
+
+
+# Predictable database constraint names are important for migrations.
+NAMING_CONVENTION = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": (
+        "fk_%(table_name)s_%(column_0_name)s_"
+        "%(referred_table_name)s"
+    ),
+    "pk": "pk_%(table_name)s",
+}
+
+metadata = MetaData(
+    naming_convention=NAMING_CONVENTION,
+)
+
+
+class Base(DeclarativeBase):
+    """Base class inherited by every SQLAlchemy database model."""
+
+    metadata = metadata
+
+
+# Ensure the SQLite data directory exists.
+settings.data_dir.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+sqlite_connect_args = (
+    {"check_same_thread": False}
+    if settings.database_url.startswith("sqlite")
+    else {}
+)
+
+engine = create_engine(
+    settings.database_url,
+    connect_args=sqlite_connect_args,
+    pool_pre_ping=True,
+)
+
+
+@event.listens_for(engine, "connect")
+def enable_sqlite_foreign_keys(
+    dbapi_connection: object,
+    connection_record: object,
+) -> None:
+    """
+    Enable foreign-key enforcement for every SQLite connection.
+
+    SQLite requires this setting to be enabled for each connection.
+    """
+
+    del connection_record
+
+    if not settings.database_url.startswith("sqlite"):
+        return
+
+    cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
+
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False,
+)
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Provide a database session and close it after each request."""
+
+    database_session = SessionLocal()
+
+    try:
+        yield database_session
+    finally:
+        database_session.close()
+===== MIGRATIONS ENV.PY =====
+from logging.config import fileConfig
+
+from alembic import context
+
+from app import models
+from app.core.config import settings
+from app.core.database import Base, engine
+
+
+# Keep the models import because it registers all tables with Base.metadata.
+del models
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+
+# Alembic will use the same database URL as FastAPI.
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url.replace("%", "%%"),
+)
+
+target_metadata = Base.metadata
+
+
+def run_migrations_offline() -> None:
+    """
+    Generate migration SQL without connecting to the database.
+    """
+
+    context.configure(
+        url=settings.database_url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={
+            "paramstyle": "named",
+        },
+        compare_type=True,
+        render_as_batch=settings.database_url.startswith(
+            "sqlite",
+        ),
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """
+    Connect to the configured database and apply migrations.
+    """
+
+    with engine.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            render_as_batch=settings.database_url.startswith(
+                "sqlite",
+            ),
+        )
+
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+===== MIGRATION FILES =====
+32a0f24006ed_create_companies_and_financial_reports.py
+40d54e1448ff_add_cash_equivalent_flag_to_ledger_.py
+4ece39e73969_add_complete_report_package_metadata.py
+711a7787d700_create_notes_and_disclosure_templates.py
+776eab6dc089_create_journal_entries_and_lines.py
+9bb95ea5f317_create_ledger_accounts.py
+abbf66f9e8dd_create_tax_profiles_rules_and_.py
+b08d5d942f85_add_report_finalisation_versioning.py
+__pycache__
