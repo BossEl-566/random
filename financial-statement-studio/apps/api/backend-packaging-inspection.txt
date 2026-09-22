@@ -1,0 +1,401 @@
+===== API STRUCTURE =====
+Folder PATH listing
+Volume serial number is 00000246 6E55:2A3D
+C:\USERS\WINDOWS USER\DESKTOP\PROJECT\ACCOUNT\RANDOM\FINANCIAL-STATEMENT-STUDIO\APPS\API\APP
+¦   main.py
+¦   __init__.py
+¦   
++---api
+¦   ¦   router.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---routes
+¦   ¦   ¦   cash_flow.py
+¦   ¦   ¦   companies.py
+¦   ¦   ¦   equity_statements.py
+¦   ¦   ¦   financial_reports.py
+¦   ¦   ¦   financial_statements.py
+¦   ¦   ¦   health.py
+¦   ¦   ¦   journal_entries.py
+¦   ¦   ¦   ledger_accounts.py
+¦   ¦   ¦   notes.py
+¦   ¦   ¦   report_finalisation.py
+¦   ¦   ¦   tax_configuration.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           cash_flow.cpython-314.pyc
+¦   ¦           companies.cpython-314.pyc
+¦   ¦           equity_statements.cpython-314.pyc
+¦   ¦           financial_reports.cpython-314.pyc
+¦   ¦           financial_statements.cpython-314.pyc
+¦   ¦           health.cpython-314.pyc
+¦   ¦           journal_entries.cpython-314.pyc
+¦   ¦           ledger_accounts.cpython-314.pyc
+¦   ¦           notes.cpython-314.pyc
+¦   ¦           report_finalisation.cpython-314.pyc
+¦   ¦           tax_configuration.cpython-314.pyc
+¦   ¦           __init__.cpython-314.pyc
+¦   ¦           
+¦   +---__pycache__
+¦           router.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---core
+¦   ¦   config.py
+¦   ¦   database.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           config.cpython-314.pyc
+¦           database.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---models
+¦   ¦   company.py
+¦   ¦   disclosure_template.py
+¦   ¦   financial_report.py
+¦   ¦   financial_report_note.py
+¦   ¦   financial_report_version.py
+¦   ¦   journal_entry.py
+¦   ¦   journal_line.py
+¦   ¦   ledger_account.py
+¦   ¦   mixins.py
+¦   ¦   tax_calculation.py
+¦   ¦   tax_profile.py
+¦   ¦   tax_rule.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           company.cpython-314.pyc
+¦           disclosure_template.cpython-314.pyc
+¦           financial_report.cpython-314.pyc
+¦           financial_report_note.cpython-314.pyc
+¦           financial_report_version.cpython-314.pyc
+¦           journal_entry.cpython-314.pyc
+¦           journal_line.cpython-314.pyc
+¦           ledger_account.cpython-314.pyc
+¦           mixins.cpython-314.pyc
+¦           tax_calculation.cpython-314.pyc
+¦           tax_profile.cpython-314.pyc
+¦           tax_rule.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---repositories
+¦   ¦   cash_flow_repository.py
+¦   ¦   company_repository.py
+¦   ¦   equity_statement_repository.py
+¦   ¦   financial_report_repository.py
+¦   ¦   journal_entry_repository.py
+¦   ¦   ledger_account_repository.py
+¦   ¦   notes_repository.py
+¦   ¦   report_finalisation_repository.py
+¦   ¦   tax_configuration_repository.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           cash_flow_repository.cpython-314.pyc
+¦           company_repository.cpython-314.pyc
+¦           equity_statement_repository.cpython-314.pyc
+¦           financial_report_repository.cpython-314.pyc
+¦           journal_entry_repository.cpython-314.pyc
+¦           ledger_account_repository.cpython-314.pyc
+¦           notes_repository.cpython-314.pyc
+¦           report_finalisation_repository.cpython-314.pyc
+¦           tax_configuration_repository.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---schemas
+¦   ¦   cash_flow.py
+¦   ¦   company.py
+¦   ¦   equity_statement.py
+¦   ¦   financial_report.py
+¦   ¦   financial_statement.py
+¦   ¦   journal_entry.py
+¦   ¦   ledger_account.py
+¦   ¦   notes.py
+¦   ¦   report_finalisation.py
+¦   ¦   tax_configuration.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           cash_flow.cpython-314.pyc
+¦           company.cpython-314.pyc
+¦           equity_statement.cpython-314.pyc
+¦           financial_report.cpython-314.pyc
+¦           financial_statement.cpython-314.pyc
+¦           journal_entry.cpython-314.pyc
+¦           ledger_account.cpython-314.pyc
+¦           notes.cpython-314.pyc
+¦           report_finalisation.cpython-314.pyc
+¦           tax_configuration.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---services
+¦   ¦   cash_flow_readiness_service.py
+¦   ¦   cash_flow_statement_service.py
+¦   ¦   company_service.py
+¦   ¦   equity_statement_service.py
+¦   ¦   financial_report_service.py
+¦   ¦   financial_statement_service.py
+¦   ¦   journal_entry_service.py
+¦   ¦   ledger_account_service.py
+¦   ¦   notes_service.py
+¦   ¦   report_finalisation_service.py
+¦   ¦   tax_configuration_service.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---accounting
+¦   ¦   ¦   account_templates.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           account_templates.cpython-314.pyc
+¦   ¦           __init__.cpython-314.pyc
+¦   ¦           
+¦   +---__pycache__
+¦           cash_flow_readiness_service.cpython-314.pyc
+¦           cash_flow_statement_service.cpython-314.pyc
+¦           company_service.cpython-314.pyc
+¦           equity_statement_service.cpython-314.pyc
+¦           financial_report_service.cpython-314.pyc
+¦           financial_statement_service.cpython-314.pyc
+¦           journal_entry_service.cpython-314.pyc
+¦           ledger_account_service.cpython-314.pyc
+¦           notes_service.cpython-314.pyc
+¦           report_finalisation_service.cpython-314.pyc
+¦           tax_configuration_service.cpython-314.pyc
+¦           __init__.cpython-314.pyc
+¦           
++---utilities
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           __init__.cpython-314.pyc
+¦           
++---__pycache__
+        main.cpython-314.pyc
+        __init__.cpython-314.pyc
+        
+
+===== MAIN =====
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import api_router
+from app.core.config import settings
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    description=(
+        "Local accounting and financial statement preparation API."
+    ),
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(
+    api_router,
+    prefix=settings.api_prefix,
+)
+
+
+@app.get("/", tags=["Application"])
+def application_information() -> dict[str, str]:
+    return {
+        "message": settings.app_name,
+        "environment": settings.environment,
+        "health": f"{settings.api_prefix}/health",
+        "documentation": "/docs",
+    }
+===== DATABASE / SQLITE REFERENCES =====
+app\core\config.py:9:DEFAULT_DATABASE_PATH = DEFAULT_DATA_DIRECTORY / "accounting.db"
+app\core\config.py:21:    database_url: str = (
+app\core\config.py:22:        f"sqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+app\core\database.py:3:from sqlalchemy import MetaData, create_engine, event
+app\core\database.py:32:# Ensure the SQLite data directory exists.
+app\core\database.py:38:sqlite_connect_args = (
+app\core\database.py:40:    if settings.database_url.startswith("sqlite")
+app\core\database.py:44:engine = create_engine(
+app\core\database.py:45:    settings.database_url,
+app\core\database.py:46:    connect_args=sqlite_connect_args,
+app\core\database.py:52:def enable_sqlite_foreign_keys(
+app\core\database.py:57:    Enable foreign-key enforcement for every SQLite connection.
+app\core\database.py:59:    SQLite requires this setting to be enabled for each connection.
+app\core\database.py:64:    if not settings.database_url.startswith("sqlite"):
+
+===== SETTINGS / CONFIG REFERENCES =====
+app\api\routes\health.py:19:    environment: str
+app\api\routes\health.py:41:        environment=settings.environment,
+app\core\config.py:4:from pydantic_settings import BaseSettings, SettingsConfigDict
+app\core\config.py:12:class Settings(BaseSettings):
+app\core\config.py:13:    """Application configuration loaded from environment variables."""
+app\core\config.py:16:    environment: str = "development"
+app\core\config.py:25:    model_config = SettingsConfigDict(
+app\main.py:34:        "environment": settings.environment,
+
+===== ALEMBIC INI =====
+# A generic, single database configuration.
+
+[alembic]
+# path to migration scripts.
+# this is typically a path given in POSIX (e.g. forward slashes)
+# format, relative to the token %(here)s which refers to the location of this
+# ini file
+script_location = %(here)s/migrations
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
+# for all available tokens
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+# Or organize into date-based subdirectories (requires recursive_version_locations = true)
+# file_template = %%(year)d/%%(month).2d/%%(day).2d_%%(hour).2d%%(minute).2d_%%(second).2d_%%(rev)s_%%(slug)s
+
+# sys.path path, will be prepended to sys.path if present.
+# defaults to the current working directory.  for multiple paths, the path separator
+# is defined by "path_separator" below.
+prepend_sys_path = .
+
+
+# timezone to use when rendering the date within the migration file
+# as well as the filename.
+# If specified, requires the tzdata library which can be installed by adding
+# `alembic[tz]` to the pip requirements.
+# string value is passed to ZoneInfo()
+# leave blank for localtime
+# timezone =
+
+# max length of characters to apply to the "slug" field
+# truncate_slug_length = 40
+
+# set to 'true' to run the environment during
+# the 'revision' command, regardless of autogenerate
+# revision_environment = false
+
+# set to 'true' to allow .pyc and .pyo files without
+# a source .py file to be detected as revisions in the
+# versions/ directory
+# sourceless = false
+
+# version location specification; This defaults
+# to <script_location>/versions.  When using multiple version
+# directories, initial revisions must be specified with --version-path.
+# The path separator used here should be the separator specified by "path_separator"
+# below.
+# version_locations = %(here)s/bar:%(here)s/bat:%(here)s/alembic/versions
+
+# path_separator; This indicates what character is used to split lists of file
+# paths, including version_locations and prepend_sys_path within configparser
+# files such as alembic.ini.
+# The default rendered in new alembic.ini files is "os", which uses os.pathsep
+# to provide os-dependent path splitting.
+#
+# Note that in order to support legacy alembic.ini files, this default does NOT
+# take place if path_separator is not present in alembic.ini.  If this
+# option is omitted entirely, fallback logic is as follows:
+#
+# 1. Parsing of the version_locations option falls back to using the legacy
+#    "version_path_separator" key, which if absent then falls back to the legacy
+#    behavior of splitting on spaces and/or commas.
+# 2. Parsing of the prepend_sys_path option falls back to the legacy
+#    behavior of splitting on spaces, commas, or colons.
+#
+# Valid values for path_separator are:
+#
+# path_separator = :
+# path_separator = ;
+# path_separator = space
+# path_separator = newline
+#
+# Use os.pathsep. Default configuration used for new projects.
+path_separator = os
+
+# set to 'true' to search source files recursively
+# in each "version_locations" directory
+# new in Alembic version 1.10
+# recursive_version_locations = false
+
+# the output encoding used when revision files
+# are written from script.py.mako
+# output_encoding = utf-8
+
+# database URL.  This is consumed by the user-maintained env.py script only.
+# other means of configuring database URLs may be customized within the env.py
+# file.
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
+# hooks = ruff
+# ruff.type = module
+# ruff.module = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Alternatively, use the exec runner to execute a binary found on your PATH
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration.  This is also consumed by the user-maintained
+# env.py script only.
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARNING
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARNING
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+
+===== ALEMBIC ENV =====
+
+===== PYTHON VERSION =====
+Python 3.14.2
+
+===== PYINSTALLER STATUS =====
