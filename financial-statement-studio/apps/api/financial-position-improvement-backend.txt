@@ -1,0 +1,1417 @@
+===== FINANCIAL POSITION SERVICE =====
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy.orm import Session
+
+from app.models.financial_report import FinancialReport
+from app.schemas.financial_statement import (
+    FinancialStatementLine,
+    FinancialStatementSection,
+    ProfitOrLossResponse,
+    StatementOfFinancialPositionResponse,
+)
+from app.schemas.journal_entry import (
+    TrialBalanceLine,
+    TrialBalanceResponse,
+)
+from app.services.journal_entry_service import (
+    JournalEntryService,
+    utc_now,
+)
+
+
+MONEY_QUANTUM = Decimal("0.01")
+
+
+PROFIT_OR_LOSS_SECTION_TITLES = {
+    "revenue": "Revenue",
+    "cost_of_sales": "Cost of Sales",
+    "direct_service_costs": "Direct Service Costs",
+    "manufacturing_costs": "Manufacturing Costs",
+    "other_income": "Other Income",
+    "administrative_expenses": (
+        "Administrative Expenses"
+    ),
+    "selling_distribution_expenses": (
+        "Selling and Distribution Expenses"
+    ),
+    "finance_costs": "Finance Costs",
+    "taxation": "Taxation",
+}
+
+
+FINANCIAL_POSITION_SECTION_TITLES = {
+    "current_assets": "Current Assets",
+    "non_current_assets": "Non-current Assets",
+    "current_liabilities": "Current Liabilities",
+    "non_current_liabilities": (
+        "Non-current Liabilities"
+    ),
+    "equity": "Equity",
+}
+
+
+PROFIT_OR_LOSS_SECTION_ORDER = (
+    "revenue",
+    "cost_of_sales",
+    "direct_service_costs",
+    "manufacturing_costs",
+    "other_income",
+    "administrative_expenses",
+    "selling_distribution_expenses",
+    "finance_costs",
+    "taxation",
+)
+
+
+FINANCIAL_POSITION_SECTION_ORDER = (
+    "current_assets",
+    "non_current_assets",
+    "current_liabilities",
+    "non_current_liabilities",
+    "equity",
+)
+
+
+DEBIT_NATURE_ACCOUNT_TYPES = {
+    "asset",
+    "expense",
+}
+
+
+CREDIT_NATURE_ACCOUNT_TYPES = {
+    "liability",
+    "equity",
+    "revenue",
+}
+
+
+def money(
+    value: Decimal | int | str,
+) -> Decimal:
+    """
+    Convert a value to a two-decimal-place accounting amount.
+    """
+
+    return Decimal(value).quantize(
+        MONEY_QUANTUM,
+    )
+
+
+class FinancialStatementService:
+    """
+    Converts a posted Trial Balance into financial statements.
+    """
+
+    def __init__(
+        self,
+        journal_entry_service: JournalEntryService
+        | None = None,
+    ) -> None:
+        self.journal_entry_service = (
+            journal_entry_service
+            or JournalEntryService()
+        )
+
+    def calculate_signed_amount(
+        self,
+        item: TrialBalanceLine,
+    ) -> Decimal:
+        """
+        Return the account balance using the natural direction
+        of its main account type.
+
+        Assets and expenses normally carry debit balances.
+        Liabilities, equity and revenue normally carry credit balances.
+
+        This also correctly handles contra accounts:
+
+        - Accumulated depreciation becomes a negative asset.
+        - Sales returns become negative revenue.
+        - Drawings become negative equity.
+        - Purchase returns become negative cost of sales.
+        """
+
+        debit_balance = money(
+            item.debit_balance,
+        )
+
+        credit_balance = money(
+            item.credit_balance,
+        )
+
+        if (
+            item.account_type
+            in DEBIT_NATURE_ACCOUNT_TYPES
+        ):
+            return money(
+                debit_balance
+                - credit_balance,
+            )
+
+        if (
+            item.account_type
+            in CREDIT_NATURE_ACCOUNT_TYPES
+        ):
+            return money(
+                credit_balance
+                - debit_balance,
+            )
+
+        return money(
+            debit_balance
+            - credit_balance,
+        )
+
+    def create_statement_line(
+        self,
+        item: TrialBalanceLine,
+    ) -> FinancialStatementLine:
+        return FinancialStatementLine(
+            ledger_account_id=(
+                item.ledger_account_id
+            ),
+            account_code=item.account_code,
+            account_name=item.account_name,
+            report_category=(
+                item.report_category
+            ),
+            amount=self.calculate_signed_amount(
+                item,
+            ),
+            is_calculated=False,
+        )
+
+    def build_section(
+        self,
+        trial_balance: TrialBalanceResponse,
+        *,
+        category: str,
+        title: str,
+    ) -> FinancialStatementSection:
+        lines = [
+            self.create_statement_line(
+                item,
+            )
+            for item in trial_balance.items
+            if item.report_category
+            == category
+        ]
+
+        total = money(
+            sum(
+                (
+                    line.amount
+                    for line in lines
+                ),
+                Decimal("0.00"),
+            ),
+        )
+
+        return FinancialStatementSection(
+            key=category,
+            title=title,
+            items=lines,
+            total=total,
+        )
+
+    def build_sections(
+        self,
+        trial_balance: TrialBalanceResponse,
+        *,
+        section_order: tuple[str, ...],
+        section_titles: dict[str, str],
+    ) -> list[FinancialStatementSection]:
+        return [
+            self.build_section(
+                trial_balance,
+                category=category,
+                title=section_titles[
+                    category
+                ],
+            )
+            for category in section_order
+        ]
+
+    def get_section_total(
+        self,
+        sections: list[
+            FinancialStatementSection
+        ],
+        category: str,
+    ) -> Decimal:
+        section = next(
+            (
+                current_section
+                for current_section in sections
+                if current_section.key
+                == category
+            ),
+            None,
+        )
+
+        if section is None:
+            return money("0.00")
+
+        return money(section.total)
+
+    def calculate_profit_or_loss_from_trial_balance(
+        self,
+        financial_report: FinancialReport,
+        trial_balance: TrialBalanceResponse,
+    ) -> ProfitOrLossResponse:
+        sections = self.build_sections(
+            trial_balance,
+            section_order=(
+                PROFIT_OR_LOSS_SECTION_ORDER
+            ),
+            section_titles=(
+                PROFIT_OR_LOSS_SECTION_TITLES
+            ),
+        )
+
+        revenue = self.get_section_total(
+            sections,
+            "revenue",
+        )
+
+        cost_of_sales = (
+            self.get_section_total(
+                sections,
+                "cost_of_sales",
+            )
+        )
+
+        direct_service_costs = (
+            self.get_section_total(
+                sections,
+                "direct_service_costs",
+            )
+        )
+
+        manufacturing_costs = (
+            self.get_section_total(
+                sections,
+                "manufacturing_costs",
+            )
+        )
+
+        direct_costs = money(
+            cost_of_sales
+            + direct_service_costs
+            + manufacturing_costs,
+        )
+
+        gross_profit = money(
+            revenue
+            - direct_costs,
+        )
+
+        other_income = (
+            self.get_section_total(
+                sections,
+                "other_income",
+            )
+        )
+
+        administrative_expenses = (
+            self.get_section_total(
+                sections,
+                "administrative_expenses",
+            )
+        )
+
+        selling_distribution_expenses = (
+            self.get_section_total(
+                sections,
+                "selling_distribution_expenses",
+            )
+        )
+
+        operating_profit = money(
+            gross_profit
+            + other_income
+            - administrative_expenses
+            - selling_distribution_expenses,
+        )
+
+        finance_costs = (
+            self.get_section_total(
+                sections,
+                "finance_costs",
+            )
+        )
+
+        profit_before_tax = money(
+            operating_profit
+            - finance_costs,
+        )
+
+        taxation = (
+            self.get_section_total(
+                sections,
+                "taxation",
+            )
+        )
+
+        profit_after_tax = money(
+            profit_before_tax
+            - taxation,
+        )
+
+        return ProfitOrLossResponse(
+            financial_report_id=(
+                financial_report.id
+            ),
+            company_id=(
+                financial_report.company_id
+            ),
+            currency=(
+                financial_report.currency
+            ),
+            period_start=(
+                financial_report.period_start
+            ),
+            period_end=trial_balance.as_of,
+            sections=sections,
+            revenue=revenue,
+            direct_costs=direct_costs,
+            gross_profit=gross_profit,
+            other_income=other_income,
+            administrative_expenses=(
+                administrative_expenses
+            ),
+            selling_distribution_expenses=(
+                selling_distribution_expenses
+            ),
+            operating_profit=(
+                operating_profit
+            ),
+            finance_costs=finance_costs,
+            profit_before_tax=(
+                profit_before_tax
+            ),
+            taxation=taxation,
+            profit_after_tax=(
+                profit_after_tax
+            ),
+            generated_at=utc_now(),
+        )
+
+    def calculate_profit_or_loss(
+        self,
+        database_session: Session,
+        *,
+        report_id: str,
+        as_of: date | None,
+    ) -> ProfitOrLossResponse:
+        financial_report = (
+            self.journal_entry_service.get_report(
+                database_session,
+                report_id,
+            )
+        )
+
+        trial_balance = (
+            self.journal_entry_service.calculate_trial_balance(
+                database_session,
+                report_id=report_id,
+                as_of=as_of,
+            )
+        )
+
+        return (
+            self.calculate_profit_or_loss_from_trial_balance(
+                financial_report,
+                trial_balance,
+            )
+        )
+
+    def calculate_statement_of_financial_position(
+        self,
+        database_session: Session,
+        *,
+        report_id: str,
+        as_of: date | None,
+    ) -> StatementOfFinancialPositionResponse:
+        financial_report = (
+            self.journal_entry_service.get_report(
+                database_session,
+                report_id,
+            )
+        )
+
+        trial_balance = (
+            self.journal_entry_service.calculate_trial_balance(
+                database_session,
+                report_id=report_id,
+                as_of=as_of,
+            )
+        )
+
+        profit_or_loss = (
+            self.calculate_profit_or_loss_from_trial_balance(
+                financial_report,
+                trial_balance,
+            )
+        )
+
+        sections = self.build_sections(
+            trial_balance,
+            section_order=(
+                FINANCIAL_POSITION_SECTION_ORDER
+            ),
+            section_titles=(
+                FINANCIAL_POSITION_SECTION_TITLES
+            ),
+        )
+
+        current_assets = (
+            self.get_section_total(
+                sections,
+                "current_assets",
+            )
+        )
+
+        non_current_assets = (
+            self.get_section_total(
+                sections,
+                "non_current_assets",
+            )
+        )
+
+        total_assets = money(
+            current_assets
+            + non_current_assets,
+        )
+
+        current_liabilities = (
+            self.get_section_total(
+                sections,
+                "current_liabilities",
+            )
+        )
+
+        non_current_liabilities = (
+            self.get_section_total(
+                sections,
+                "non_current_liabilities",
+            )
+        )
+
+        total_liabilities = money(
+            current_liabilities
+            + non_current_liabilities,
+        )
+
+        equity_section = next(
+            section
+            for section in sections
+            if section.key == "equity"
+        )
+
+        recorded_equity = money(
+            equity_section.total,
+        )
+
+        current_year_profit = money(
+            profit_or_loss.profit_after_tax,
+        )
+
+        equity_section.items.append(
+            FinancialStatementLine(
+                ledger_account_id=None,
+                account_code=None,
+                account_name=(
+                    "Current Year Profit"
+                    if current_year_profit
+                    >= Decimal("0.00")
+                    else "Current Year Loss"
+                ),
+                report_category="equity",
+                amount=current_year_profit,
+                is_calculated=True,
+            ),
+        )
+
+        total_equity = money(
+            recorded_equity
+            + current_year_profit,
+        )
+
+        equity_section.total = total_equity
+
+        total_liabilities_and_equity = money(
+            total_liabilities
+            + total_equity,
+        )
+
+        accounting_equation_difference = money(
+            total_assets
+            - total_liabilities_and_equity,
+        )
+
+        return StatementOfFinancialPositionResponse(
+            financial_report_id=(
+                financial_report.id
+            ),
+            company_id=(
+                financial_report.company_id
+            ),
+            currency=(
+                financial_report.currency
+            ),
+            as_of=trial_balance.as_of,
+            sections=sections,
+            current_assets=current_assets,
+            non_current_assets=(
+                non_current_assets
+            ),
+            total_assets=total_assets,
+            current_liabilities=(
+                current_liabilities
+            ),
+            non_current_liabilities=(
+                non_current_liabilities
+            ),
+            total_liabilities=(
+                total_liabilities
+            ),
+            recorded_equity=(
+                recorded_equity
+            ),
+            current_year_profit=(
+                current_year_profit
+            ),
+            total_equity=total_equity,
+            total_liabilities_and_equity=(
+                total_liabilities_and_equity
+            ),
+            accounting_equation_difference=(
+                accounting_equation_difference
+            ),
+            is_balanced=(
+                accounting_equation_difference
+                == Decimal("0.00")
+            ),
+            generated_at=utc_now(),
+        )
+===== ACCOUNT TEMPLATE =====
+from dataclasses import dataclass
+
+from app.schemas.company import BusinessType
+from app.schemas.ledger_account import (
+    AccountType,
+    CashFlowCategory,
+    NormalBalance,
+    ReportCategory,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AccountTemplateItem:
+    """One account definition used when initializing a company."""
+
+    account_code: str
+    account_name: str
+    account_type: AccountType
+    report_category: ReportCategory
+    normal_balance: NormalBalance
+    cash_flow_category: CashFlowCategory | None
+    display_order: int
+    description: str | None = None
+
+
+BASE_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "1000",
+        "Cash in Hand",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1000,
+    ),
+    AccountTemplateItem(
+        "1010",
+        "Bank Accounts",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1010,
+    ),
+    AccountTemplateItem(
+        "1020",
+        "Mobile Money Balance",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1020,
+    ),
+    AccountTemplateItem(
+        "1100",
+        "Accounts Receivable",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1100,
+    ),
+    AccountTemplateItem(
+        "1110",
+        "Allowance for Doubtful Debts",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        1110,
+        "Contra-asset account reducing accounts receivable.",
+    ),
+    AccountTemplateItem(
+        "1300",
+        "Prepayments",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1300,
+    ),
+    AccountTemplateItem(
+        "1500",
+        "Motor Vehicles",
+        AccountType.ASSET,
+        ReportCategory.NON_CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.INVESTING,
+        1500,
+    ),
+    AccountTemplateItem(
+        "1510",
+        "Furniture and Fittings",
+        AccountType.ASSET,
+        ReportCategory.NON_CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.INVESTING,
+        1510,
+    ),
+    AccountTemplateItem(
+        "1520",
+        "Equipment",
+        AccountType.ASSET,
+        ReportCategory.NON_CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.INVESTING,
+        1520,
+    ),
+    AccountTemplateItem(
+        "1590",
+        "Accumulated Depreciation",
+        AccountType.ASSET,
+        ReportCategory.NON_CURRENT_ASSETS,
+        NormalBalance.CREDIT,
+        CashFlowCategory.NON_CASH,
+        1590,
+        "Contra-asset account reducing property, plant and equipment.",
+    ),
+    AccountTemplateItem(
+        "2000",
+        "Accounts Payable",
+        AccountType.LIABILITY,
+        ReportCategory.CURRENT_LIABILITIES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        2000,
+    ),
+    AccountTemplateItem(
+        "2010",
+        "Accrued Expenses",
+        AccountType.LIABILITY,
+        ReportCategory.CURRENT_LIABILITIES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        2010,
+    ),
+    AccountTemplateItem(
+        "2020",
+        "Tax Payable",
+        AccountType.LIABILITY,
+        ReportCategory.CURRENT_LIABILITIES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        2020,
+    ),
+    AccountTemplateItem(
+        "2100",
+        "Short-Term Loans",
+        AccountType.LIABILITY,
+        ReportCategory.CURRENT_LIABILITIES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.FINANCING,
+        2100,
+    ),
+    AccountTemplateItem(
+        "2500",
+        "Long-Term Loans",
+        AccountType.LIABILITY,
+        ReportCategory.NON_CURRENT_LIABILITIES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.FINANCING,
+        2500,
+    ),
+    AccountTemplateItem(
+        "3000",
+        "Owner's Capital",
+        AccountType.EQUITY,
+        ReportCategory.EQUITY,
+        NormalBalance.CREDIT,
+        CashFlowCategory.FINANCING,
+        3000,
+    ),
+    AccountTemplateItem(
+        "3010",
+        "Drawings",
+        AccountType.EQUITY,
+        ReportCategory.EQUITY,
+        NormalBalance.DEBIT,
+        CashFlowCategory.FINANCING,
+        3010,
+    ),
+    AccountTemplateItem(
+        "3020",
+        "Retained Earnings",
+        AccountType.EQUITY,
+        ReportCategory.EQUITY,
+        NormalBalance.CREDIT,
+        CashFlowCategory.NOT_APPLICABLE,
+        3020,
+    ),
+    AccountTemplateItem(
+        "4900",
+        "Other Income",
+        AccountType.REVENUE,
+        ReportCategory.OTHER_INCOME,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4900,
+    ),
+    AccountTemplateItem(
+        "7000",
+        "Salaries and Wages",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7000,
+    ),
+    AccountTemplateItem(
+        "7010",
+        "Rent Expense",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7010,
+    ),
+    AccountTemplateItem(
+        "7020",
+        "Utilities",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7020,
+    ),
+    AccountTemplateItem(
+        "7030",
+        "Insurance Expense",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7030,
+    ),
+    AccountTemplateItem(
+        "7040",
+        "Repairs and Maintenance",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7040,
+    ),
+    AccountTemplateItem(
+        "7050",
+        "Depreciation Expense",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.NON_CASH,
+        7050,
+    ),
+    AccountTemplateItem(
+        "7060",
+        "Professional Fees",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7060,
+    ),
+    AccountTemplateItem(
+        "7070",
+        "Office Expenses",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7070,
+    ),
+    AccountTemplateItem(
+        "7080",
+        "Bank Charges",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7080,
+    ),
+    AccountTemplateItem(
+        "7090",
+        "Telephone and Internet",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7090,
+    ),
+    AccountTemplateItem(
+        "7100",
+        "Travel and Transport",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7100,
+    ),
+    AccountTemplateItem(
+        "7110",
+        "Marketing and Advertising",
+        AccountType.EXPENSE,
+        ReportCategory.SELLING_DISTRIBUTION_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7110,
+    ),
+    AccountTemplateItem(
+        "7120",
+        "Bad Debt Expense",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.NON_CASH,
+        7120,
+    ),
+    AccountTemplateItem(
+        "7190",
+        "Miscellaneous Expenses",
+        AccountType.EXPENSE,
+        ReportCategory.ADMINISTRATIVE_EXPENSES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        7190,
+    ),
+    AccountTemplateItem(
+        "8000",
+        "Finance Costs",
+        AccountType.EXPENSE,
+        ReportCategory.FINANCE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        8000,
+    ),
+    AccountTemplateItem(
+        "9000",
+        "Income Tax Expense",
+        AccountType.EXPENSE,
+        ReportCategory.TAXATION,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        9000,
+    ),
+)
+
+
+TRADING_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "1200",
+        "Inventory",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1200,
+    ),
+    AccountTemplateItem(
+        "4000",
+        "Sales Revenue",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "4010",
+        "Sales Returns",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        4010,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Opening Inventory",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Purchases",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Carriage Inward",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+    AccountTemplateItem(
+        "5030",
+        "Purchase Returns",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        5030,
+    ),
+    AccountTemplateItem(
+        "5040",
+        "Closing Inventory Adjustment",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        5040,
+    ),
+)
+
+
+SERVICE_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "4000",
+        "Service Revenue",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Direct Labour",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Subcontractor Costs",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Direct Service Expenses",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+)
+
+
+MANUFACTURING_ACCOUNTS: tuple[
+    AccountTemplateItem,
+    ...,
+] = (
+    AccountTemplateItem(
+        "1200",
+        "Raw Materials Inventory",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1200,
+    ),
+    AccountTemplateItem(
+        "1210",
+        "Work in Progress",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1210,
+    ),
+    AccountTemplateItem(
+        "1220",
+        "Finished Goods Inventory",
+        AccountType.ASSET,
+        ReportCategory.CURRENT_ASSETS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        1220,
+    ),
+    AccountTemplateItem(
+        "4000",
+        "Sales Revenue",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Raw Materials Used",
+        AccountType.EXPENSE,
+        ReportCategory.MANUFACTURING_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Direct Factory Labour",
+        AccountType.EXPENSE,
+        ReportCategory.MANUFACTURING_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Factory Overheads",
+        AccountType.EXPENSE,
+        ReportCategory.MANUFACTURING_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+    AccountTemplateItem(
+        "5030",
+        "Cost of Production",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5030,
+    ),
+)
+
+
+TRANSPORT_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "4000",
+        "Transport Income",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "4010",
+        "Delivery Income",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4010,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Fuel and Lubricants",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Driver Wages",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Vehicle Repairs",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+    AccountTemplateItem(
+        "5030",
+        "Road Tolls and Licensing",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5030,
+    ),
+    AccountTemplateItem(
+        "5040",
+        "Vehicle Insurance",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5040,
+    ),
+    AccountTemplateItem(
+        "5050",
+        "Vehicle Depreciation",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.NON_CASH,
+        5050,
+    ),
+)
+
+
+CHURCH_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "4000",
+        "Tithes",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "4010",
+        "Offerings",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4010,
+    ),
+    AccountTemplateItem(
+        "4020",
+        "Donations",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4020,
+    ),
+    AccountTemplateItem(
+        "4030",
+        "Grants",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4030,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Programme Expenses",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Welfare Expenses",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Missions and Outreach",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+)
+
+
+SCHOOL_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "4000",
+        "Tuition Fees",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "4010",
+        "Admission Fees",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4010,
+    ),
+    AccountTemplateItem(
+        "4020",
+        "Boarding Fees",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4020,
+    ),
+    AccountTemplateItem(
+        "4030",
+        "Other School Income",
+        AccountType.REVENUE,
+        ReportCategory.OTHER_INCOME,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4030,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Teaching Staff Costs",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+    AccountTemplateItem(
+        "5010",
+        "Teaching Materials",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5010,
+    ),
+    AccountTemplateItem(
+        "5020",
+        "Student Welfare",
+        AccountType.EXPENSE,
+        ReportCategory.DIRECT_SERVICE_COSTS,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5020,
+    ),
+)
+
+
+OTHER_ACCOUNTS: tuple[AccountTemplateItem, ...] = (
+    AccountTemplateItem(
+        "4000",
+        "Revenue",
+        AccountType.REVENUE,
+        ReportCategory.REVENUE,
+        NormalBalance.CREDIT,
+        CashFlowCategory.OPERATING,
+        4000,
+    ),
+    AccountTemplateItem(
+        "5000",
+        "Direct Costs",
+        AccountType.EXPENSE,
+        ReportCategory.COST_OF_SALES,
+        NormalBalance.DEBIT,
+        CashFlowCategory.OPERATING,
+        5000,
+    ),
+)
+
+
+BUSINESS_ACCOUNT_TEMPLATES: dict[
+    BusinessType,
+    tuple[AccountTemplateItem, ...],
+] = {
+    BusinessType.TRADING: TRADING_ACCOUNTS,
+    BusinessType.RETAIL: TRADING_ACCOUNTS,
+    BusinessType.SERVICE: SERVICE_ACCOUNTS,
+    BusinessType.MANUFACTURING: MANUFACTURING_ACCOUNTS,
+    BusinessType.TRANSPORT_LOGISTICS: TRANSPORT_ACCOUNTS,
+    BusinessType.CHURCH_NONPROFIT: CHURCH_ACCOUNTS,
+    BusinessType.SCHOOL: SCHOOL_ACCOUNTS,
+    BusinessType.OTHER: OTHER_ACCOUNTS,
+}
+
+
+def get_account_template(
+    business_type: BusinessType,
+) -> tuple[AccountTemplateItem, ...]:
+    """
+    Return common accounts plus accounts for the selected business type.
+    """
+
+    template_accounts = BUSINESS_ACCOUNT_TEMPLATES.get(
+        business_type,
+        OTHER_ACCOUNTS,
+    )
+
+    merged_accounts: dict[str, AccountTemplateItem] = {
+        account.account_code: account
+        for account in BASE_ACCOUNTS
+    }
+
+    for account in template_accounts:
+        merged_accounts[account.account_code] = account
+
+    return tuple(
+        sorted(
+            merged_accounts.values(),
+            key=lambda account: (
+                account.display_order,
+                account.account_code,
+            ),
+        ),
+    )
