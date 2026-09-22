@@ -87,8 +87,9 @@ function getPackagedBackendExecutable(): string {
 function getProductionDataDirectory(): string {
   return path.join(
     app.getPath(
-      "userData",
+      "appData",
     ),
+    "Financial Statement Studio",
     "data",
   );
 }

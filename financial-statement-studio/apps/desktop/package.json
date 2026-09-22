@@ -2,19 +2,70 @@
   "name": "desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron desktop shell for Financial Statement Studio.",
+  "description": "Professional desktop financial accounting and statement preparation software.",
+  "author": "Financial Statement Studio",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "npm run build && electron .",
-    "start": "electron ."
+    "start": "electron .",
+    "pack:win": "npm run build && electron-builder --win --dir",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
-    "electron": "^43.1.1",
+    "electron": "43.1.1",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1"
+  },
+  "build": {
+    "appId": "com.financialstatementstudio.desktop",
+    "productName": "Financial Statement Studio",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+  {
+    "from": "../api/dist/financial-statement-backend",
+    "to": "backend"
+  },
+  {
+    "from": "../web/.next/standalone/apps",
+    "to": "web-runtime/apps"
+  },
+  {
+    "from": "../web/.next/standalone/node_modules",
+    "to": "web-runtime/node_modules",
+    "filter": [
+      "**/*"
+    ]
+  }
+],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Financial Statement Studio",
+      "artifactName": "Financial-Statement-Studio-Setup-${version}.${ext}"
+    }
   }
 }

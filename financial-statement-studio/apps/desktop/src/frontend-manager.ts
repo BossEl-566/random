@@ -35,6 +35,8 @@ function getFrontendDirectory(): string {
   if (app.isPackaged) {
     return path.join(
       process.resourcesPath,
+      "web-runtime",
+      "apps",
       "web",
     );
   }
